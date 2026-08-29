@@ -112,6 +112,14 @@
 							<component :is="item.icon" class="w-4 h-4 shrink-0" />
 							<span>{{ item.label }}</span>
 						</router-link>
+						<button
+							type="button"
+							class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+							@click="showCustomerDisplayControl = true; isOpen = false"
+						>
+							<Monitor class="w-4 h-4 shrink-0" />
+							<span>{{ __("Customer Display") }}</span>
+						</button>
 					</nav>
 				</ScrollArea>
 
@@ -123,6 +131,7 @@
 				</div>
 			</aside>
 		</Transition>
+		<CustomerDisplaySettings :open="showCustomerDisplayControl" @close="showCustomerDisplayControl = false" />
 	</div>
 </template>
 
@@ -149,10 +158,12 @@ import {
 	BarChart3,
 	Banknote,
 	ScanBarcode,
+	Monitor,
 } from "lucide-vue-next";
 
 import { useBranding } from "@/composables/useBranding";
 import { isElectron } from "@/services/electronBridge";
+import CustomerDisplaySettings from "@/components/customer-display/CustomerDisplaySettings.vue";
 
 const route = useRoute();
 const posStore = usePosStore();
@@ -160,6 +171,7 @@ const isDark = inject<Ref<boolean>>("isDark")!;
 const { logoLight, logoDark } = useBranding();
 
 const isOpen = ref(false);
+const showCustomerDisplayControl = ref(false);
 
 function handleToggleSidebar() {
 	isOpen.value = !isOpen.value;

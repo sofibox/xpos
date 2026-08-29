@@ -103,6 +103,17 @@ async function initializeNumberFormat(): Promise<void> {
 	const pinia = createPinia();
 	window.__ = translate;
 	app.use(pinia);
+	if (!window.location.pathname.endsWith("/customer-display")) {
+		import("@/services/customerDisplayPublisher").then(({ startCustomerDisplayPublisher }) => {
+			startCustomerDisplayPublisher();
+		});
+	}
+	router.addRoute({
+		path: "/customer-display",
+		name: "customer-display",
+		component: () => import("@/views/CustomerDisplay.vue"),
+		meta: { title: "Customer Display", requiresAuth: true, fullScreen: true },
+	});
 	app.use(router);
 	initializeNamespaces();
 	await initializeBrowserStorage();

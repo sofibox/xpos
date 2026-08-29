@@ -895,6 +895,15 @@ const changeAmount = computed(() => {
 	return diff > 0 ? diff : 0;
 });
 
+// Keep the customer-facing screen in sync while cash is entered. The invoice
+// payload still receives this same amount on submit; resetting it on close
+// prevents a cancelled payment from leaving a stale change figure on display.
+watch(changeAmount, (amount) => {
+	window.dispatchEvent(new CustomEvent("xpos:customer-display-change", {
+		detail: { amount: cartStore.isReturnMode ? 0 : amount },
+	}));
+}, { immediate: true });
+
 const remainingAmount = computed(() => {
 	const total = Math.abs(cartStore.grandTotal);
 	const diff = roundCurrency(total - effectiveTendered.value);
@@ -1460,6 +1469,7 @@ async function finalizeWithLocalFbr(pending: CreateInvoiceResult): Promise<Creat
 }
 
 function close() {
+	window.dispatchEvent(new CustomEvent("xpos:customer-display-change", { detail: { amount: 0 } }));
 	cartStore.closePaymentDialog();
 }
 
