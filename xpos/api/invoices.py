@@ -322,6 +322,9 @@ def create_invoice(data: str | dict, local_id: str | None = None):
 
 	pos = frappe.get_cached_doc("POS Profile", pos_profile)
 
+	from xpos.api.discounts import validate_discount_payload
+	validate_discount_payload(data, pos)
+
 	doctype = get_invoice_type()
 
 	debit_to = None
@@ -403,6 +406,8 @@ def create_invoice(data: str | dict, local_id: str | None = None):
 	else:
 		invoice_doc.return_against = None
 
+	invoice_doc.additional_discount_percentage = additional_discount_percentage
+	invoice_doc.discount_amount = discount_amount
 	if additional_discount_percentage:
 		invoice_doc.additional_discount_percentage = additional_discount_percentage
 		invoice_doc.apply_discount_on = data.get("apply_discount_on") or "Grand Total"
@@ -800,6 +805,9 @@ def save_draft_invoice(data: str | dict):
 
 	pos = frappe.get_cached_doc("POS Profile", pos_profile)
 
+	from xpos.api.discounts import validate_discount_payload
+	validate_discount_payload(data, pos)
+
 	doctype = get_invoice_type()
 
 	debit_to = None
@@ -846,6 +854,8 @@ def save_draft_invoice(data: str | dict):
 	)
 	invoice_doc.selling_price_list = data.get("selling_price_list") or pos.get("selling_price_list")
 
+	invoice_doc.additional_discount_percentage = flt(data.get("additional_discount_percentage"))
+	invoice_doc.discount_amount = flt(data.get("discount_amount"))
 	if data.get("additional_discount_percentage"):
 		invoice_doc.additional_discount_percentage = flt(data["additional_discount_percentage"])
 		invoice_doc.apply_discount_on = data.get("apply_discount_on") or "Grand Total"
