@@ -5,7 +5,7 @@
 import frappe
 from frappe import _
 from frappe.model.mapper import get_mapped_doc
-from frappe.utils import add_days, flt
+from frappe.utils import add_days, cint, flt
 
 from xpos.api.tender import validate_tender_currency_legs
 from xpos.x_pos.api.payments import get_pos_credit_redeem_remark
@@ -17,7 +17,27 @@ from xpos.x_pos.doctype.pos_coupon.pos_coupon import update_coupon_code_count
 from xpos.x_pos.integrations.fbr import fiscalize_invoice
 
 
+def validate_return_access(doc):
+	"""Enforce the same return gates as the POS UI on saved invoices."""
+	profile_name = doc.get("pos_profile")
+	if not profile_name:
+		return
+	negative_qty = any(flt(row.get("qty")) < 0 for row in doc.get("items", []))
+	if not cint(doc.get("is_return")) and not negative_qty:
+		return
+	from xpos.api.auth import user_has_pos_permission
+
+	if not user_has_pos_permission("sale_return", pos_profile=profile_name):
+		frappe.throw(_("You are not allowed to process sales returns."), frappe.PermissionError)
+	profile = frappe.get_cached_doc("POS Profile", profile_name)
+	if not cint(profile.get("allow_return")):
+		frappe.throw(_("Sales returns are disabled for this POS Profile."), frappe.PermissionError)
+	if negative_qty and not cint(doc.get("is_return")):
+		frappe.throw(_("Negative item quantities require a return invoice."))
+
+
 def validate(doc, method):
+	validate_return_access(doc)
 	validate_shift(doc)
 	set_patient(doc)
 	auto_set_delivery_charges(doc)
