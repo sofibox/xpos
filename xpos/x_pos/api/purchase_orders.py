@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 import json
+from functools import wraps
 
 import frappe
 from erpnext.accounts.party import get_party_account
@@ -12,6 +13,24 @@ from xpos.api.profiles import resolve_pos_profile
 
 from .utils import get, get_default_warehouse
 
+
+
+def require_purchase_access(function):
+	"""Keep purchasing APIs out of sales-only sessions, including direct calls.
+
+	This is an entry gate; profile flags and document permissions still apply.
+	Use native permissions so custom purchasing roles work without hardcoded names.
+	"""
+	@wraps(function)
+	def guarded(*args, **kwargs):
+		if not any(
+			frappe.has_permission(doctype, "read")
+			for doctype in ("Purchase Order", "Purchase Invoice")
+		):
+			frappe.throw(_("Purchasing access is required."), frappe.PermissionError)
+		return function(*args, **kwargs)
+
+	return guarded
 
 def ensure_allowed(profile: dict, flag: str, label: str):
 	if not cint(profile.get(flag)):
@@ -229,6 +248,7 @@ def _create_purchase_receipt(
 
 
 @frappe.whitelist()
+@require_purchase_access
 def create_supplier(data: str | dict) -> dict:
 	payload = json.loads(data) if isinstance(data, str) else data
 	profile = resolve_pos_profile(payload.get("pos_profile")).as_dict()
@@ -264,6 +284,7 @@ def create_supplier(data: str | dict) -> dict:
 
 
 @frappe.whitelist()
+@require_purchase_access
 def search_suppliers(search_text: str | None = None, limit: int = 20) -> list[dict]:
 	filters = {"disabled": 0}
 	or_filters = None
@@ -274,7 +295,7 @@ def search_suppliers(search_text: str | None = None, limit: int = 20) -> list[di
 			"supplier_name": ["like", like_value],
 		}
 
-	suppliers = frappe.get_all(
+	suppliers = frappe.get_list(
 		"Supplier",
 		filters=filters,
 		or_filters=or_filters,
@@ -292,6 +313,7 @@ def search_suppliers(search_text: str | None = None, limit: int = 20) -> list[di
 
 
 @frappe.whitelist()
+@require_purchase_access
 def create_purchase_item(data: str | dict) -> dict:
 	payload = json.loads(data) if isinstance(data, str) else data
 	profile = resolve_pos_profile(payload.get("pos_profile")).as_dict()
@@ -448,6 +470,7 @@ def _create_payment_entry(
 
 
 @frappe.whitelist()
+@require_purchase_access
 def create_purchase_order(data: str | dict) -> dict:
 	payload = json.loads(data) if isinstance(data, str) else data
 	profile = resolve_pos_profile(payload.get("pos_profile")).as_dict()
@@ -623,6 +646,7 @@ def create_purchase_order(data: str | dict) -> dict:
 
 
 @frappe.whitelist()
+@require_purchase_access
 def create_purchase_invoice_direct(data: str | dict) -> dict:
 	payload = json.loads(data) if isinstance(data, str) else data
 	profile = resolve_pos_profile(payload.get("pos_profile")).as_dict()
@@ -791,6 +815,7 @@ def create_purchase_invoice_direct(data: str | dict) -> dict:
 
 
 @frappe.whitelist()
+@require_purchase_access
 def search_items(search_text: str | None = None, limit: int = 20) -> list[dict]:
 	limit = cint(limit) or 20
 	search_text = (search_text or "").strip()
@@ -872,6 +897,7 @@ def search_items(search_text: str | None = None, limit: int = 20) -> list[dict]:
 
 
 @frappe.whitelist()
+@require_purchase_access
 def search_item_by_barcode(barcode: str, pos_profile: str | None = None) -> dict | None:
 	"""Search item specifically by barcode for purchasing."""
 	if not barcode:
@@ -991,6 +1017,7 @@ def _create_purchase_invoice(
 
 
 @frappe.whitelist()
+@require_purchase_access
 def get_pending_receipts(warehouse: str | None = None, limit: int = 50) -> list[dict]:
 	"""Get Purchase Orders that are pending stock receipt."""
 	filters = {
@@ -1053,6 +1080,7 @@ def get_pending_receipts(warehouse: str | None = None, limit: int = 50) -> list[
 
 
 @frappe.whitelist()
+@require_purchase_access
 def get_purchase_order_detail(purchase_order: str) -> dict:
 	"""Get a single Purchase Order with its items for receiving."""
 
@@ -1093,6 +1121,7 @@ def get_purchase_order_detail(purchase_order: str) -> dict:
 
 
 @frappe.whitelist()
+@require_purchase_access
 def receive_stock(data: str | dict) -> dict:
 	"""
 	Create a Purchase Receipt from a Purchase Order.
@@ -1204,6 +1233,7 @@ def receive_stock(data: str | dict) -> dict:
 
 
 @frappe.whitelist()
+@require_purchase_access
 def get_stock_and_transit(item_codes: str | list[str], warehouse: str | None = None) -> dict:
 	"""
 	Get stock in hand and transit stock for given item codes.
@@ -1270,6 +1300,7 @@ def get_stock_and_transit(item_codes: str | list[str], warehouse: str | None = N
 
 
 @frappe.whitelist()
+@require_purchase_access
 def get_category_items(
 	supplier: str,
 	po_category: str,
@@ -1514,6 +1545,7 @@ def _get_item_uoms(item_codes: list[str]) -> dict[str, list[dict[str, float]]]:
 
 
 @frappe.whitelist()
+@require_purchase_access
 def save_po_draft(data: str | dict, pos_profile: str) -> dict:
 	"""
 	Save or update a Purchase Order in Draft state (docstatus=0).
@@ -1633,6 +1665,7 @@ def save_po_draft(data: str | dict, pos_profile: str) -> dict:
 
 
 @frappe.whitelist()
+@require_purchase_access
 def load_po_draft(name: str) -> dict:
 	"""
 	Load a draft Purchase Order and return its data in the frontend cart format.
@@ -1696,6 +1729,7 @@ def load_po_draft(name: str) -> dict:
 
 
 @frappe.whitelist()
+@require_purchase_access
 def delete_po_draft(name: str) -> dict:
 	"""
 	Delete a draft Purchase Order (docstatus=0 only).
@@ -1718,6 +1752,7 @@ def delete_po_draft(name: str) -> dict:
 
 
 @frappe.whitelist()
+@require_purchase_access
 def list_po_drafts(limit: int = 20) -> list[dict]:
 	"""
 	List draft Purchase Orders owned by the current user (docstatus=0).
@@ -1752,6 +1787,7 @@ def list_po_drafts(limit: int = 20) -> list[dict]:
 
 
 @frappe.whitelist()
+@require_purchase_access
 def save_pi_draft(data: str | dict) -> dict:
 	"""Save or update a Purchase Invoice draft (docstatus=0).
 
@@ -1872,6 +1908,7 @@ def save_pi_draft(data: str | dict) -> dict:
 
 
 @frappe.whitelist()
+@require_purchase_access
 def load_pi_draft(name: str, pos_profile: str) -> dict:
 	"""Load a Purchase Invoice draft (docstatus=0) into the frontend cart format.
 
@@ -1959,6 +1996,7 @@ def load_pi_draft(name: str, pos_profile: str) -> dict:
 
 
 @frappe.whitelist()
+@require_purchase_access
 def delete_pi_draft(name: str) -> dict:
 	"""Delete a Purchase Invoice draft (docstatus=0)."""
 	if not frappe.db.exists("Purchase Invoice", name):
@@ -1973,6 +2011,7 @@ def delete_pi_draft(name: str) -> dict:
 
 
 @frappe.whitelist()
+@require_purchase_access
 def list_pi_drafts(limit: int = 20) -> list[dict]:
 	"""List draft Purchase Invoices owned by the current user (docstatus=0).
 
@@ -2007,6 +2046,7 @@ def list_pi_drafts(limit: int = 20) -> list[dict]:
 
 
 @frappe.whitelist()
+@require_purchase_access
 def submit_pi_draft(name: str) -> dict:
 	"""Submit a Purchase Invoice draft.
 
@@ -2034,6 +2074,7 @@ def submit_pi_draft(name: str) -> dict:
 
 
 @frappe.whitelist()
+@require_purchase_access
 def get_purchase_orders_for_invoice(
 	supplier: str,
 	warehouse: str | None = None,
@@ -2175,6 +2216,7 @@ def update_item_prices(items: list, pos_profile: dict):
 
 
 @frappe.whitelist()
+@require_purchase_access
 def get_item_purchase_details(item_code: str, pos_profile: str | None = None) -> dict | None:
 	"""Fetch full item details for purchase invoice including prices, UOMs, and tax info.
 
@@ -2262,6 +2304,7 @@ def get_item_purchase_details(item_code: str, pos_profile: str | None = None) ->
 
 
 @frappe.whitelist()
+@require_purchase_access
 def get_purchase_tax_template(template_name: str | None = None, company: str | None = None) -> dict:
 	"""Fetch taxes from a Purchase Taxes and Charges Template.
 

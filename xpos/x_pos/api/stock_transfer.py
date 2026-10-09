@@ -37,6 +37,7 @@ def get_in_transit_transfers(warehouse: str | None = None, limit: int = 50):
 	to the user's warehouse (the original items may specify the eventual
 	target via the Material Request or we detect by company/warehouse).
 	"""
+	frappe.has_permission("Stock Entry", "read", throw=True)
 	limit = cint(limit) or 50
 
 	filters = {
@@ -46,7 +47,7 @@ def get_in_transit_transfers(warehouse: str | None = None, limit: int = 50):
 		"per_transferred": ["<", 100],
 	}
 
-	entries = frappe.get_all(
+	entries = frappe.get_list(
 		"Stock Entry",
 		filters=filters,
 		fields=[
@@ -147,10 +148,12 @@ def _get_received_qty(outgoing_entry: str, ste_detail: str) -> float:
 @frappe.whitelist()
 def get_transfer_detail(stock_entry: str):
 	"""Get detailed info for a single in-transit stock entry."""
+	frappe.has_permission("Stock Entry", "read", throw=True)
 	if not stock_entry or not frappe.db.exists("Stock Entry", stock_entry):
 		frappe.throw(_("Stock Entry {0} does not exist.").format(stock_entry))
 
 	se = frappe.get_doc("Stock Entry", stock_entry)
+	se.check_permission("read")
 
 	if se.purpose != "Material Transfer" or not se.add_to_transit:
 		frappe.throw(_("Stock Entry {0} is not a Material Transfer with in-transit.").format(stock_entry))
@@ -218,6 +221,8 @@ def receive_transit_stock(data: str | dict):
 
 	If receive_qty < original qty, the difference is the shortage.
 	"""
+	frappe.has_permission("Stock Entry", "create", throw=True)
+	frappe.has_permission("Stock Entry", "submit", throw=True)
 	payload = json.loads(data) if isinstance(data, str) else data
 
 	outgoing_entry_name = payload.get("outgoing_stock_entry")
@@ -225,6 +230,7 @@ def receive_transit_stock(data: str | dict):
 		frappe.throw(_("Outgoing Stock Entry is required."))
 
 	outgoing_se = frappe.get_doc("Stock Entry", outgoing_entry_name)
+	outgoing_se.check_permission("read")
 
 	if outgoing_se.docstatus != 1:
 		frappe.throw(_("Stock Entry {0} is not submitted.").format(outgoing_entry_name))
@@ -308,7 +314,7 @@ def receive_transit_stock(data: str | dict):
 	if not receive_se.items:
 		frappe.throw(_("No valid items to receive."))
 
-	receive_se.flags.ignore_permissions = True
+	receive_se.flags.ignore_permissions = False
 	receive_se.insert()
 	receive_se.submit()
 
@@ -346,6 +352,8 @@ def return_shortage_to_source(data: str | dict):
 	    "remarks": "Items damaged during transport"
 	}
 	"""
+	frappe.has_permission("Stock Entry", "create", throw=True)
+	frappe.has_permission("Stock Entry", "submit", throw=True)
 	payload = json.loads(data) if isinstance(data, str) else data
 
 	outgoing_entry_name = payload.get("outgoing_stock_entry")
@@ -353,6 +361,7 @@ def return_shortage_to_source(data: str | dict):
 		frappe.throw(_("Outgoing Stock Entry is required."))
 
 	outgoing_se = frappe.get_doc("Stock Entry", outgoing_entry_name)
+	outgoing_se.check_permission("read")
 
 	if outgoing_se.docstatus != 1:
 		frappe.throw(_("Stock Entry {0} is not submitted.").format(outgoing_entry_name))
@@ -420,7 +429,7 @@ def return_shortage_to_source(data: str | dict):
 	if not return_se.items:
 		frappe.throw(_("No valid items to return."))
 
-	return_se.flags.ignore_permissions = True
+	return_se.flags.ignore_permissions = False
 	return_se.insert()
 	return_se.submit()
 
