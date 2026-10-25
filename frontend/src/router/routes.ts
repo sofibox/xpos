@@ -76,7 +76,7 @@ const routes: RouteRecordRaw[] = [
 		path: "/barcode-print",
 		name: "barcode-print",
 		component: BarcodePrintView,
-		meta: { title: "Barcode Printer", requiresAuth: true },
+		meta: { title: "Barcode Printer", requiresAuth: true, fullScreen: true },
 	},
 	{
 		path: "/purchase-order",

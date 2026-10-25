@@ -2,7 +2,7 @@
 	<div
 		class="fixed inset-0 bg-linear-to-br from-primary via-primary/90 to-primary/95 z-50 flex flex-col items-center overflow-y-auto p-4"
 	>
-		<div class="w-full max-w-md animate-in fade-in zoom-in-95 duration-300 my-auto">
+		<div class="w-full max-w-xl animate-in fade-in zoom-in-95 duration-300 my-auto">
 			<div class="text-center mb-8">
 				<img
 					:src="logoLight"
@@ -50,12 +50,12 @@
 							<Select
 								:items="
 									profiles.map((p) => ({
-										label: `${p.name} (${p.company})`,
+										label: p.name,
 										value: p.name,
 									}))
 								"
 								v-model="selectedProfile"
-								@update:model-value="onProfileChange"
+								@update:model-value="() => onProfileChange()"
 								class="h-10 w-full px-10"
 							/>
 							<p v-if="profiles.length === 0" class="mt-1 text-xs text-muted-foreground">
@@ -80,22 +80,22 @@
 
 						<div v-if="paymentMethodsList.length > 0">
 							<label class="text-sm font-semibold text-foreground mb-2 block">
-								{{ __("Opening Cash Balance") }}
+								{{ __("Opening Balances") }}
 							</label>
 							<div class="space-y-2">
 								<div
 									v-for="method in paymentMethodsList"
 									:key="method.mode_of_payment"
-									class="flex items-center gap-3"
+									class="grid grid-cols-2 items-center gap-3"
 								>
-									<span class="text-sm text-muted-foreground w-28 truncate">
+									<span class="text-sm text-foreground leading-snug break-words">
 										{{ method.mode_of_payment }}
 									</span>
 									<NumberInput
 										v-model="method.opening_amount"
 										:min="0"
 										:precision="moneyPrecision"
-										class="flex-1"
+										class="w-full min-w-0"
 										placeholder="0.00"
 									/>
 								</div>
@@ -177,14 +177,33 @@ const selectedCompany = ref("");
 const paymentMethodsList = ref<PaymentMethodEntry[]>([]);
 
 async function loadProfiles() {
+	const previousProfile = selectedProfile.value;
+	const previousAmounts = new Map(
+		paymentMethodsList.value.map((method) => [
+			method.mode_of_payment,
+			method.opening_amount,
+		]),
+	);
+
 	isLoadingData.value = true;
 	try {
 		const data = await posStore.fetchOpeningData();
 		profiles.value = (data?.pos_profiles || []) as ProfileOption[];
 
-		if (profiles.value.length === 1) {
+		const previousProfileStillExists = profiles.value.some(
+			(profile) => profile.name === previousProfile,
+		);
+
+		if (previousProfileStillExists) {
+			selectedProfile.value = previousProfile;
+			onProfileChange(previousAmounts);
+		} else if (profiles.value.length === 1) {
 			selectedProfile.value = profiles.value[0].name;
 			onProfileChange();
+		} else {
+			selectedProfile.value = "";
+			selectedCompany.value = "";
+			paymentMethodsList.value = [];
 		}
 	} catch (error) {
 		showError("Failed to load POS data. Please refresh.");
@@ -201,7 +220,7 @@ watch(syncStatus.syncCompleteCount, (count, prev) => {
 	}
 });
 
-function onProfileChange() {
+function onProfileChange(preservedAmounts?: ReadonlyMap<string, number>) {
 	const profile = profiles.value.find((p) => p.name === selectedProfile.value);
 	if (profile) {
 		selectedCompany.value = profile.company;
@@ -212,7 +231,7 @@ function onProfileChange() {
 		);
 		paymentMethodsList.value = methods.map((m) => ({
 			mode_of_payment: m.mode_of_payment,
-			opening_amount: 0,
+			opening_amount: preservedAmounts?.get(m.mode_of_payment) ?? 0,
 		}));
 
 		if (paymentMethodsList.value.length === 0) {

@@ -36,12 +36,11 @@
 					</Badge>
 				</h2>
 				<div class="flex flex-1 min-w-50 items-center justify-end gap-2">
+					<span v-if="posStore.salesPersonEnabled && !cartStore.isReturnMode" class="text-xs text-muted-foreground">{{ __("Current seller") }}</span>
 					<Autocomplete
 						v-if="posStore.salesPersonEnabled && !cartStore.isReturnMode"
 						v-model="cartStore.salesPerson"
-						doctype="Sales Person"
-						query="xpos.api.customers.sales_person_query"
-						:filters="{ pos_profile: posStore.profileName }"
+						:options="posStore.allowedSalesPersons.map(name => ({ value: name, label: name }))"
 						:placeholder="__('Sales Person')"
 						:open-on-focus="true"
 						:clearable="true"

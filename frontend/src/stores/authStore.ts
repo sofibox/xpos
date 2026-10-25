@@ -1,3 +1,4 @@
+import { publicNickname } from "@/utils/nickname";
 import { call } from "@/services/api";
 import { isElectron } from "@/services/electronBridge";
 import { loadPermissions, resetPermissions } from "@/services/userRights";
@@ -23,7 +24,7 @@ export const useAuthStore = defineStore("auth", () => {
 
 	const userName = computed(() => user.value?.user || "Guest");
 	const userEmail = computed(() => user.value?.user_email || "");
-	const userFullName = computed(() => user.value?.user_fullname || "");
+	const userFullName = computed(() => publicNickname(user.value?.user_fullname));
 	const isGuest = computed(() => !user.value || user.value.user === "Guest");
 	const isSystemManager = computed(() =>
 		Boolean((window.xpos?.boot as Record<string, unknown> | undefined)?.xpos_is_system_manager),
@@ -58,7 +59,7 @@ export const useAuthStore = defineStore("auth", () => {
 					user.value = {
 						user: loggedUser,
 						user_email: bootUserInfo?.user_email || loggedUser,
-						user_fullname: bootUserInfo?.user_fullname || loggedUser,
+						user_fullname: publicNickname(await call("xpos.api.nicknames.get_my_nickname")),
 						image: bootUserInfo?.image || "",
 					};
 				}
@@ -100,7 +101,7 @@ export const useAuthStore = defineStore("auth", () => {
 			user.value = {
 				user: lastUser,
 				user_email: (posUser.email as string) || lastUser,
-				user_fullname: (posUser.full_name as string) || lastUser,
+				user_fullname: publicNickname(posUser.nickname),
 			};
 
 			window
@@ -134,6 +135,7 @@ export const useAuthStore = defineStore("auth", () => {
 			user.value = {
 				user: username,
 				user_email: username,
+				user_fullname: publicNickname(await call("xpos.api.nicknames.get_my_nickname")),
 			};
 
 			await loadPermissions(username);
@@ -172,7 +174,7 @@ export const useAuthStore = defineStore("auth", () => {
 			user.value = {
 				user: username,
 				user_email: (userData.email as string) || username,
-				user_fullname: (userData.full_name as string) || username,
+				user_fullname: publicNickname(userData.nickname),
 			};
 
 			await window.electronAPI!.db.setSetting("last_logged_user", username, "auth");

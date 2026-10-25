@@ -19,6 +19,8 @@ from xpos.api.utilities import get_invoice_type
 
 def execute(filters=None):
 	filters = frappe.parse_json(filters) if filters else {}
+	from xpos.api.report_scope import shift_scope
+	filters = shift_scope(filters)
 	doctype = get_invoice_type()
 	invoices = _get_invoices(filters, doctype)
 	return (
@@ -45,10 +47,11 @@ def _get_invoices(filters, doctype):
 		if filters.get("from_date") and filters.get("to_date"):
 			conditions["posting_date"] = ["between", [filters["from_date"], filters["to_date"]]]
 
-	return frappe.get_all(
+	return frappe.get_list(
 		doctype,
 		filters=conditions,
 		fields=["name", "currency", "grand_total", "net_total", "change_amount", "is_return"],
+		limit_page_length=0,
 	)
 
 

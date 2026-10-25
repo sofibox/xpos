@@ -161,10 +161,10 @@ onMounted(() => {
 						<ArrowLeft class="w-4 h-4" />
 					</Button>
 					<div class="flex-1 min-w-0">
-						<h3 class="font-semibold text-foreground truncate">
+						<h3 class="font-semibold text-foreground whitespace-normal break-words">
 							{{ purchaseStore.selectedTransit.name }}
 						</h3>
-						<p class="text-sm text-muted-foreground truncate">
+						<p class="text-sm text-muted-foreground whitespace-normal break-words">
 							{{
 								purchaseStore.selectedTransit.source_warehouse ||
 								purchaseStore.selectedTransit.from_warehouse
@@ -202,7 +202,7 @@ onMounted(() => {
 					>
 						<div class="flex items-start justify-between gap-2">
 							<div class="min-w-0">
-								<p class="font-medium text-foreground truncate">
+								<p class="font-medium text-foreground whitespace-normal break-words">
 									{{ item.item_name }}
 								</p>
 								<p class="text-xs text-muted-foreground">
@@ -369,7 +369,7 @@ onMounted(() => {
 						</div>
 						<div class="flex-1 min-w-0">
 							<div class="flex items-center justify-between">
-								<p class="font-medium text-foreground truncate">
+								<p class="font-medium text-foreground whitespace-normal break-words">
 									{{ entry.name }}
 								</p>
 								<Badge
@@ -379,7 +379,7 @@ onMounted(() => {
 									{{ entry.total_pending_items }} {{ __("items") }}
 								</Badge>
 							</div>
-							<p class="text-sm text-muted-foreground truncate">
+							<p class="text-sm text-muted-foreground whitespace-normal break-words">
 								{{ entry.source_warehouse || entry.from_warehouse }} &rarr;
 								{{ __("In Transit") }}
 							</p>

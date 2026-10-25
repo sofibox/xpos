@@ -3,6 +3,7 @@
 
 
 import frappe
+from xpos.api.nicknames import nickname
 from frappe import _
 from frappe.sessions import get_csrf_token as session_csrf_token
 from frappe.utils import cint, flt
@@ -217,7 +218,7 @@ def get_pos_users(
 		for u in frappe.get_all(
 			"User",
 			filters={"name": ["in", [r.user for r in profile_users]]},
-			fields=["name", "username", "full_name", "enabled", "modified"],
+			fields=["name", "username", "enabled", "modified"],
 			ignore_permissions=True,
 		)
 	}
@@ -235,7 +236,8 @@ def get_pos_users(
 		row = {
 			"name": user.name,
 			"username": user.username or user.name,
-			"full_name": user.full_name or user.name,
+			"full_name": nickname(user.name),
+			"nickname": nickname(user.name),
 			"enabled": cint(user.enabled),
 			"modified": str(user.modified) if user.modified else None,
 			"password_hash": "",

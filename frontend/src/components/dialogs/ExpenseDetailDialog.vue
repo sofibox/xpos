@@ -17,7 +17,7 @@
 					</div>
 					<div class="min-w-0 flex-1">
 						<DialogTitle class="text-base flex items-center gap-2 flex-wrap">
-							<span class="min-w-0 truncate">{{ expenseTitle }}</span>
+							<span class="min-w-0 whitespace-normal break-words">{{ expenseTitle }}</span>
 							<Badge
 								v-if="expense"
 								:variant="statusVariant(expense.docstatus)"

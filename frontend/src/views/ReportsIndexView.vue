@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { Search, BarChart3, ArrowRight, Lock, Sparkles, Layers3, FolderOpen } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,8 @@ import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import __ from "@/lib/translate";
 import {
-	getReportDefinitions,
+	getAccessibleReports,
+	loadReportAccess,
 	isReportAccessible,
 	type ReportCategory,
 	type ReportDefinition,
@@ -17,8 +18,18 @@ import {
 
 const router = useRouter();
 const searchTerm = ref("");
+const accessError = ref("");
+const accessLoading = ref(true);
+async function refreshAccess() {
+    accessLoading.value = true;
+    accessError.value = "";
+    try { await loadReportAccess(); }
+    catch { accessError.value = __("Unable to check report access. Connect to the server and try again."); }
+    finally { accessLoading.value = false; }
+}
+onMounted(refreshAccess);
 
-const reportDefinitions = computed(() => getReportDefinitions());
+const reportDefinitions = computed(() => getAccessibleReports());
 
 const filteredReports = computed(() => {
 	const query = searchTerm.value.trim().toLowerCase();
@@ -89,6 +100,11 @@ function clearSearch() {
 				<div class="relative p-5 sm:p-6 space-y-4">
 					<div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
 						<div class="space-y-2 max-w-3xl">
+                            <p v-if="accessLoading">{{ __("Checking report access...") }}</p>
+                            <div v-if="accessError" role="alert">
+                                <p>{{ accessError }}</p>
+                                <Button @click="refreshAccess">{{ __("Try Again") }}</Button>
+                            </div>
 							<div class="flex flex-wrap items-center gap-2">
 								<Badge variant="outline" class="gap-1.5 bg-background/80">
 									<Layers3 class="h-3.5 w-3.5" />
@@ -148,7 +164,7 @@ function clearSearch() {
 				class="flex flex-col items-center justify-center py-20 text-center"
 			>
 				<FolderOpen class="h-14 w-14 text-muted-foreground/30 mb-4" />
-				<p class="text-lg font-semibold text-foreground">{{ __("No reports match your search") }}</p>
+				<p class="text-lg font-semibold text-foreground">{{ __("No available reports match your search") }}</p>
 				<p class="text-sm text-muted-foreground mt-1 max-w-md">
 					{{ __("Try a different keyword or clear the search field.") }}
 				</p>

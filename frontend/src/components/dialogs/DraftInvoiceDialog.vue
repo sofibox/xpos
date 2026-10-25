@@ -101,7 +101,7 @@
 							<div class="flex items-start justify-between">
 								<div class="flex-1 min-w-0">
 									<div class="flex items-center gap-2 mb-1 flex-wrap">
-										<h3 class="text-sm font-medium text-foreground truncate">
+										<h3 class="text-sm font-medium text-foreground whitespace-normal break-words">
 											{{ draft.name }}
 										</h3>
 										<Badge variant="destructive" class="text-xs">
@@ -201,7 +201,7 @@
 							<div class="flex items-start justify-between gap-3">
 								<div class="flex-1 min-w-0">
 									<div class="flex items-center gap-2 mb-1 flex-wrap">
-										<h3 class="text-sm font-medium text-foreground truncate">
+										<h3 class="text-sm font-medium text-foreground whitespace-normal break-words">
 											{{ invoice.name }}
 										</h3>
 										<Badge variant="warning" class="text-xs">

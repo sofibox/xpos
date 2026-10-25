@@ -171,7 +171,6 @@
 			<PopoverContentStyled class="w-56 p-2" align="end">
 				<div class="px-2 py-1.5 border-b border-border mb-1">
 					<p class="text-sm font-medium">{{ authStore.userFullName || __("User") }}</p>
-					<p class="text-xs text-muted-foreground">{{ authStore.userEmail }}</p>
 				</div>
 				<Button variant="ghost" size="sm" class="w-full justify-start gap-2" @click="toggleDarkMode">
 					<component

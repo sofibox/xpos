@@ -258,6 +258,7 @@ async function selectInvoice(invoiceName: string) {
 	try {
 		const result = await call<{
 			name: string;
+            sales_person?: string;
 			customer: string;
 			customer_name: string;
 			items: Array<{
@@ -276,7 +277,8 @@ async function selectInvoice(invoiceName: string) {
 			invoice_name: invoiceName,
 			pos_profile: posStore.profileName,
 		});
-		if (result?.customer) {
+		originalReturnSeller.value = result?.sales_person || "";
+        if (result?.customer) {
 			selectedInvoice.value = {
 				...selectedInvoice.value!,
 				customer: result.customer,
@@ -300,12 +302,14 @@ async function selectInvoice(invoiceName: string) {
 	}
 }
 
+const originalReturnSeller = ref("");
+
 function processReturn() {
 	if (!selectedInvoice.value || !hasReturnItems.value) return;
 
 	cartStore.clearCart();
 	const allowedItemCodes = returnItems.value.map((i) => i.item_code);
-	cartStore.enterReturnMode(selectedInvoice.value.name, allowedItemCodes);
+	cartStore.enterReturnMode(selectedInvoice.value.name, allowedItemCodes, originalReturnSeller.value);
 
 	cartStore.setCustomer({
 		name: selectedInvoice.value.customer || selectedInvoice.value.customer_name,
@@ -335,6 +339,7 @@ function processReturn() {
 }
 
 function close() {
+	originalReturnSeller.value = "";
 	searchTerm.value = "";
 	invoices.value = [];
 	selectedInvoice.value = null;

@@ -2,6 +2,8 @@
 # For license information, please see license.txt
 
 import frappe
+import base64
+import mimetypes
 from frappe import _
 from frappe.utils import cint
 
@@ -44,31 +46,44 @@ def get_receipt_context(pos_profile: str, print_format: str | None = None) -> di
 	company = frappe.get_cached_doc("Company", profile.company)
 
 	address = ""
-	if company.get("company_address"):
-		addr = frappe.get_cached_doc("Address", company.company_address)
-		address = ", ".join(
+	address_name = profile.get("company_address") or company.get("company_address")
+	if address_name:
+		addr = frappe.get_cached_doc("Address", address_name)
+		address = "\n".join(
 			p
 			for p in [
 				addr.address_line1,
 				addr.address_line2,
-				addr.city,
-				addr.state,
-				addr.pincode,
+				" ".join(filter(None, [addr.pincode, addr.city])) + (", " + addr.state if addr.state else ""),
 			]
 			if p
 		)
 
-	fmt = print_format or profile.get("default_print_format") or "XPOS Thermal Receipt"
+	# Embed a local public logo so an actual disconnected print needs no network request.
+	logo = profile.get("custom_receipt_logo") or company.get("company_logo") or ""
+	if logo.startswith("/files/"):
+		file_name = frappe.db.get_value("File", {"file_url": logo, "is_private": 0}, "name")
+		if file_name:
+			file_doc = frappe.get_doc("File", file_name)
+			content = file_doc.get_content()
+			mime = mimetypes.guess_type(logo)[0] or "image/png"
+			if isinstance(content, bytes) and len(content) <= 1024 * 1024 and mime in ("image/png", "image/jpeg", "image/webp"):
+				logo = "data:" + mime + ";base64," + base64.b64encode(content).decode("ascii")
+
+	fmt = print_format or profile.get("print_format") or profile.get("default_print_format") or "XPOS Thermal Receipt"
 	css = frappe.db.get_value("Print Format", fmt, "css") or ""
 
 	return {
 		"company_name": company.company_name or company.name,
 		"company_phone": company.get("phone_no") or "",
-		"company_email": company.get("email") or "",
+		"company_email": profile.get("custom_receipt_email") or "",
 		"company_website": company.get("website") or "",
 		"company_address": address,
-		"company_tax_id": company.get("tax_id") or "",
-		"company_logo": company.get("company_logo") or "",
+		"company_tax_id": "",  # Identity tax numbers are never needed by this receipt renderer.
+		"company_registration_no": profile.get("custom_receipt_registration_no") or "",
+		"receipt_message": profile.get("custom_receipt_message") or "",
+		"receipt_brand": profile.get("custom_receipt_brand") or "LOZiPOS",
+		"company_logo": logo,
 		"receipt_header": company.get("receipt_header") or "",
 		"receipt_footer": company.get("receipt_footer") or "",
 		"currency": company.get("default_currency") or "",

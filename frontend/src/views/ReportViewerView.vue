@@ -33,6 +33,7 @@ import {
 	compareReportRows,
 	fetchReportData,
 	fetchReportMeta,
+	loadReportAccess,
 	formatReportCell,
 	getReportDefinition,
 	getVisibleReportColumns,
@@ -63,6 +64,8 @@ const reportColumns = ref<ReportColumn[]>([]);
 const reportRows = ref<Record<string, unknown>[]>([]);
 const reportSummary = ref<ReportSummaryItem[]>([]);
 const isLoading = ref(false);
+const checkingAccess = ref(true);
+const accessCheckFailed = ref(false);
 const errorMessage = ref("");
 const lastRefreshedAt = ref<string | null>(null);
 const searchTerm = ref("");
@@ -156,6 +159,11 @@ async function loadReport() {
 	}
 
 	document.title = `${report.title} | X POS`;
+    checkingAccess.value = true;
+    accessCheckFailed.value = false;
+    try { await loadReportAccess(); }
+    catch (error) { accessCheckFailed.value = true; errorMessage.value = extractErrorMessage(error); return; }
+    finally { checkingAccess.value = false; }
 	if (!isReportAccessible(report)) {
 		errorMessage.value = __("You do not have access to this report.");
 		return;
@@ -384,7 +392,14 @@ function goBack() {
 			</Card>
 		</div>
 
-		<div v-else-if="!isReportAllowed" class="flex h-full items-center justify-center p-6 text-center">
+		<div v-else-if="checkingAccess" class="flex h-full items-center justify-center p-6" role="status">
+            {{ __("Checking report access...") }}
+        </div>
+        <div v-else-if="accessCheckFailed" class="flex h-full flex-col items-center justify-center gap-3 p-6" role="alert">
+            <p>{{ __("Unable to check report access. Connect to the server and try again.") }}</p>
+            <Button @click="loadReport">{{ __("Retry") }}</Button>
+        </div>
+        <div v-else-if="!isReportAllowed" class="flex h-full items-center justify-center p-6 text-center">
 			<Card class="w-full max-w-xl border-border/70 bg-card p-8">
 				<div
 					class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10 text-destructive"
@@ -412,7 +427,7 @@ function goBack() {
 							<Button variant="ghost" size="icon-sm" @click="goBack">
 								<ArrowLeft class="h-4 w-4" />
 							</Button>
-							<h1 class="truncate text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+							<h1 class="break-words text-xl font-bold tracking-tight text-foreground sm:text-2xl">
 								{{ activeReport.title }}
 							</h1>
 							<Badge variant="outline">{{ activeReport.category }}</Badge>
@@ -534,6 +549,7 @@ function goBack() {
 
 					<div v-else>
 						<ReportTable
+                            v-if="!errorMessage"
 							:columns="visibleColumns"
 							:rows="pagedRows"
 							:totals="totalRowsList"

@@ -209,7 +209,40 @@ def get_report_meta(report: str) -> dict:
 	if filters is None:
 		frappe.throw(_("Unknown report: {0}").format(report), frappe.DoesNotExistError)
 
-	if not frappe.has_permission("Report", "read"):
+	if not get_report_access().get(report, False):
 		frappe.throw(_("Not permitted to view reports"), frappe.PermissionError)
 
+	if "LOZIRA Cashier" in frappe.get_roles():
+		filters = [f for f in filters if f["fieldname"] not in {"supplier", "brand"}]
+		if report == "POS Shift Reconciliation":
+			filters = [_link("pos_opening_shift", "Opening Shift", "POS Opening Shift", required=True)]
+			latest = frappe.get_list("POS Opening Shift", filters={"owner": frappe.session.user}, pluck="name", order_by="creation desc", limit_page_length=1)
+			if latest:
+				filters[0]["defaultValue"] = latest[0]
 	return {"filters": _apply_company_defaults(filters)}
+
+
+REPORT_PERMISSION_KEYS = {
+    "Current Stock Report": "current_stock_report",
+    "Current Stock By Brand": "current_stock_by_brand",
+    "POS Shift Reconciliation": "shift_report",
+}
+
+
+@frappe.whitelist()
+def get_report_access() -> dict:
+    """Use the same role and reference-document checks as query_report.run."""
+    from xpos.api.auth import user_has_pos_permission
+    result = {}
+    for name in _filters():
+        allowed = False
+        if frappe.session.user != "Guest" and frappe.db.exists("Report", name):
+            report = frappe.get_cached_doc("Report", name)
+            key = REPORT_PERMISSION_KEYS.get(name)
+            allowed = bool(
+                not report.disabled and report.is_permitted()
+                and frappe.has_permission(report.ref_doctype, "report")
+                and (not key or user_has_pos_permission(key))
+            )
+        result[name] = allowed
+    return result

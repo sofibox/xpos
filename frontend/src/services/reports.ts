@@ -1,3 +1,4 @@
+import { ref } from "vue";
 import { call } from "@/services/api";
 import { __ } from "@/lib/utils";
 import { hasPermission, type PosPermissions } from "@/services/userRights";
@@ -187,7 +188,7 @@ const reportDefinitions: ReportDefinition[] = [
 		title: __("Stock Audit Report"),
 		reportName: "Stock Audit Report",
 		description: __(
-			"Thermal-printable stock audit by item with available qty. Filter by warehouse, brand, supplier, or item."
+			"Stock quantities and reorder levels for your permitted warehouses."
 		),
 		category: "Inventory",
 		thermalPrint: true,
@@ -230,12 +231,22 @@ export function getReportDefinitions(): ReportDefinition[] {
 	return [...reportDefinitions];
 }
 
+const reportAccess = ref<Record<string, boolean>>({});
+
+export async function loadReportAccess(): Promise<void> {
+    // Fail closed, including when switching users or losing connectivity.
+    reportAccess.value = {};
+    const response = await call<Record<string, boolean>>("xpos.api.reports.get_report_access");
+    reportAccess.value = response || {};
+}
+
 export function getAccessibleReports(): ReportDefinition[] {
-	return reportDefinitions.filter((report) => !report.permissionKey || hasPermission(report.permissionKey));
+    return reportDefinitions.filter(isReportAccessible);
 }
 
 export function isReportAccessible(report: ReportDefinition): boolean {
-	return !report.permissionKey || hasPermission(report.permissionKey);
+    return reportAccess.value[report.reportName] === true
+        && (!report.permissionKey || hasPermission(report.permissionKey));
 }
 
 export function buildInitialReportFilters(

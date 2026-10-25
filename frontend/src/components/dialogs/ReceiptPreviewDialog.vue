@@ -58,8 +58,12 @@
 							__("Created By")
 						}}</span>
 						<p class="font-medium text-foreground">
-							{{ invoice.owner || "-" }}
+							{{ publicNickname(invoice.owner_nickname) }}
 						</p>
+					</div>
+					<div v-if="invoice.sales_person" class="space-y-1">
+						<span class="text-xs text-muted-foreground uppercase tracking-wide">{{ __("Sales Person") }}</span>
+						<p class="font-medium text-foreground">{{ invoice.sales_person }}</p>
 					</div>
 					<div v-if="invoice.sales_partner" class="space-y-1">
 						<span class="text-xs text-muted-foreground uppercase tracking-wide">{{
@@ -298,6 +302,7 @@
 </template>
 
 <script setup lang="ts">
+import { publicNickname } from "@/utils/nickname";
 import { RotateCcw, Printer, Repeat, Loader2 } from "lucide-vue-next";
 import {
 	Dialog,
@@ -410,6 +415,7 @@ async function returnFromOrder(order: Invoice) {
 
 	try {
 		const details = await call<{
+            sales_person?: string;
 			items: Array<{
 				item_code: string;
 				item_name: string;
@@ -428,7 +434,7 @@ async function returnFromOrder(order: Invoice) {
 
 		cartStore.clearCart();
 		const allowedItemCodes = (details?.items || []).map((i) => i.item_code);
-		cartStore.enterReturnMode(order.name, allowedItemCodes);
+		cartStore.enterReturnMode(order.name, allowedItemCodes, details?.sales_person);
 		cartStore.setCustomer({
 			name: order.customer || order.customer_name || "",
 			customer_name: order.customer_name,

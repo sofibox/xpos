@@ -85,6 +85,8 @@ export interface POSProfile {
 	block_sale_beyond_available_qty?: boolean;
 	purchase_taxes?: PurchaseTaxEntry[];
 	allowed_sales_persons?: { sales_person: string }[];
+	custom_require_sales_person?: number;
+	custom_remember_sales_person?: number;
 	[key: string]: any;
 }
 
@@ -489,6 +491,7 @@ export interface Invoice {
 	redeem_loyalty_points?: number;
 	loyalty_redemption_account?: string;
 	owner?: string;
+	owner_nickname?: string;
 	pos_profile?: string;
 	coupon_code?: string;
 	remarks?: string;
@@ -699,6 +702,9 @@ export interface PrintSettings {
 }
 
 export interface ReceiptContext {
+	company_registration_no?: string;
+	receipt_message?: string;
+	receipt_brand?: string;
 	company_name: string;
 	company_phone: string;
 	company_email: string;
@@ -751,6 +757,9 @@ export interface ReceiptSnapshot {
 	posting_time: string;
 	is_return: boolean;
 	cashier: string;
+	/** Explicit nickname, absent on older snapshots which must render STAFF. */
+	cashier_nickname?: string;
+	sales_person?: string;
 	customer_name: string;
 	items: ReceiptSnapshotItem[];
 	taxes: ReceiptSnapshotTax[];

@@ -7,6 +7,8 @@ from frappe import _
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
+	from xpos.api.report_scope import stock_scope
+	filters = stock_scope(filters)
 	data = get_data(filters)
 	columns = get_columns()
 	return columns, data
@@ -74,7 +76,9 @@ def get_data(filters):
 			ti.item_name,
 			COALESCE(ti.brand, '') AS brand,
 			bin.warehouse,
-			bin.actual_qty AS qty_in_hand
+			bin.actual_qty AS qty_in_hand,
+            COALESCE((SELECT MAX(r.warehouse_reorder_level) FROM `tabItem Reorder` r
+                WHERE r.parent = ti.name AND r.warehouse = bin.warehouse), 0) AS reorder_level
 		FROM `tabItem` ti
 		INNER JOIN `tabBin` bin ON ti.item_code = bin.item_code
 		WHERE """
@@ -89,6 +93,7 @@ def get_data(filters):
 
 def get_columns():
 	return [
+        {"label": _("Reorder Level"), "fieldname": "reorder_level", "fieldtype": "Float", "width": 110},
 		{
 			"label": _("Item Code"),
 			"fieldname": "item_code",

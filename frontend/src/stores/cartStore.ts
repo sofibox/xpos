@@ -1,3 +1,5 @@
+import { useSalesPersonSelection } from "@/composables/useSalesPersonSelection";
+import { useAuthStore } from "./authStore";
 import { newInvoiceId } from "@/services/invoiceSubmission";
 import { defineStore } from "pinia";
 import { ref, computed, watch } from "vue";
@@ -88,7 +90,12 @@ export const useCartStore = defineStore("cart", () => {
 	const deliveryDate = ref("");
 	const postingDate = ref(nowDate());
 	const writeOffAmount = ref(0);
-	const salesPerson = ref("");
+	const sellerSelection = useSalesPersonSelection(
+        () => JSON.stringify([useAuthStore().userName, posStore.profileName, posStore.posOpeningShift?.name]),
+        () => !!posStore.posProfile?.custom_remember_sales_person,
+        () => posStore.allowedSalesPersons || [],
+    );
+    const { salesPerson } = sellerSelection;
 	const redeemLoyaltyPoints = ref(false);
 	const loyaltyPoints = ref(0);
 	const loyaltyAmount = ref(0);
@@ -720,7 +727,8 @@ export const useCartStore = defineStore("cart", () => {
 		ruleDiscountAmount.value = 0;
 	}
 
-	function enterReturnMode(invoiceName: string, allowedItemCodes?: string[]): void {
+	function enterReturnMode(invoiceName: string, allowedItemCodes?: string[], originalSeller?: string): void {
+        sellerSelection.loadDocument(originalSeller);
 		isReturnMode.value = true;
 		returnAgainst.value = invoiceName;
 		returnItemCodes.value = allowedItemCodes || items.value.map((i) => i.item_code);
@@ -1095,7 +1103,7 @@ export const useCartStore = defineStore("cart", () => {
 		orderNotes.value = "";
 		deliveryDate.value = "";
 		postingDate.value = nowDate();
-		salesPerson.value = "";
+		if (!isReturnMode.value) sellerSelection.newSale();
 		payments.value = [];
 		changeLegs.value = [];
 		changeAmount.value = 0;
@@ -1108,6 +1116,7 @@ export const useCartStore = defineStore("cart", () => {
 
 	function clearAll(): void {
 		clearCart();
+        sellerSelection.newSale();
 		customer.value = null;
 		showPaymentDialog.value = false;
 		isReturnMode.value = false;
@@ -1237,9 +1246,7 @@ export const useCartStore = defineStore("cart", () => {
 			if (result.pos_delivery_date) {
 				deliveryDate.value = result.pos_delivery_date;
 			}
-			if (result.sales_person) {
-				salesPerson.value = result.sales_person;
-			}
+			sellerSelection.loadDocument(result.sales_person);
 			if (result.pos_delivery_charges) {
 				selectedDeliveryCharge.value = {
 					name: result.pos_delivery_charges,
@@ -1483,6 +1490,8 @@ export const useCartStore = defineStore("cart", () => {
 			posting_time: new Date().toTimeString().slice(0, 8),
 			is_return: isReturnMode.value,
 			cashier,
+			cashier_nickname: cashier,
+			sales_person: salesPerson.value || undefined,
 			customer_name: customerName.value,
 			items: snapshotItems,
 			taxes: calculatedTaxes.value.map((t) => ({

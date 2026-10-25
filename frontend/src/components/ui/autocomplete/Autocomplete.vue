@@ -476,10 +476,10 @@ defineExpose({ focus, select, getInputEl, inputRef });
 								@mouseenter="highlightedIndex = flatVisibleOptions.indexOf(option)"
 							>
 								<div class="flex-1 min-w-0">
-									<div class="truncate">{{ option.label }}</div>
+									<div class="whitespace-normal break-words">{{ option.label }}</div>
 									<div
 										v-if="option.description"
-										class="text-xs text-muted-foreground truncate mt-0.5"
+										class="text-xs text-muted-foreground whitespace-normal break-words mt-0.5"
 									>
 										{{ option.description }}
 									</div>
@@ -511,10 +511,10 @@ defineExpose({ focus, select, getInputEl, inputRef });
 							@mouseenter="highlightedIndex = flatVisibleOptions.indexOf(option)"
 						>
 							<div class="flex-1 min-w-0">
-								<div class="truncate">{{ option.label }}</div>
+								<div class="whitespace-normal break-words">{{ option.label }}</div>
 								<div
 									v-if="option.description"
-									class="text-xs text-muted-foreground truncate mt-0.5"
+									class="text-xs text-muted-foreground whitespace-normal break-words mt-0.5"
 								>
 									{{ option.description }}
 								</div>

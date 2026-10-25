@@ -1,3 +1,4 @@
+import { publicNickname } from "@/utils/nickname";
 import { formatFor, formatWithSymbol } from "@/composables/useCurrency";
 import type { ReceiptContext, ReceiptSnapshot } from "@/types/pos.types";
 import { formatFloat, formatQty } from "@/utils/numberFormat";
@@ -40,15 +41,10 @@ export function buildReceiptHtml(snapshot: ReceiptSnapshot, ctx: ReceiptContext)
 	const isReturn = snapshot.is_return;
 
 	const logo = ctx.company_logo
-		? `<img class="store-logo-left" src="${esc(ctx.company_logo)}" alt="${esc(ctx.company_name)}" />`
+		? `<img class="store-logo" src="${esc(ctx.company_logo)}" alt="${esc(ctx.company_name)}" />`
 		: "";
 
-	const contactLine = [
-		ctx.company_phone ? `Tel: ${esc(ctx.company_phone)}` : "",
-		ctx.company_email ? esc(ctx.company_email) : "",
-	]
-		.filter(Boolean)
-		.join(" &bull; ");
+	const contactLine = [ctx.company_phone ? `Tel: ${esc(ctx.company_phone)}` : "", ctx.company_email ? esc(ctx.company_email) : ""].filter(Boolean).join(" | ");
 
 	const itemsHtml = snapshot.items
 		.map((item) => {
@@ -181,29 +177,23 @@ export function buildReceiptHtml(snapshot: ReceiptSnapshot, ctx: ReceiptContext)
     <hr class="div-dashed">
     <div class="payments-section">
         <div class="total-row" style="font-size:9px;font-weight:700;text-transform:uppercase;color:#000;margin-bottom:2px;">
-            <span>Payment Details</span>
+            <span>Payment</span>
         </div>
         ${snapshot.payments.map(paymentRowHtml).join("")}
         ${changeHtml}
     </div>`
 		: "";
 
-	const totalItems = snapshot.items.length;
-
 	return `<style>${ctx.css}</style>
 <div class="receipt-container">
     <div class="receipt-header">
-        <div class="header-top">
-            ${logo}
-            <div class="store-name-right">${esc(ctx.company_name)}</div>
-        </div>
-        ${ctx.receipt_header ? `<div class="receipt-header-html">${ctx.receipt_header}</div>` : ""}
+        ${logo}
+        <div class="store-name">${esc(ctx.company_name)}</div>
+        ${ctx.company_registration_no ? `<div class="store-registration">SSM: ${esc(ctx.company_registration_no)}</div>` : ""}
         <div class="store-detail">
-            ${ctx.company_address ? `${esc(ctx.company_address)}<br>` : ""}
-            ${contactLine}
-            ${ctx.company_website ? `<br>${esc(ctx.company_website)}` : ""}
+            ${ctx.company_address ? `<div class="store-address">${esc(ctx.company_address.replace(/\n+/g, ", "))}</div>` : ""}
+            <div class="store-contact">${contactLine}</div>
         </div>
-        ${ctx.company_tax_id ? `<div class="store-tax-id">Tax ID: ${esc(ctx.company_tax_id)}</div>` : ""}
     </div>
 
     ${isReturn ? '<div class="return-banner">&#x21A9; RETURN / REFUND</div>' : ""}
@@ -220,25 +210,15 @@ export function buildReceiptHtml(snapshot: ReceiptSnapshot, ctx: ReceiptContext)
             <span class="meta-value">${fmtDate(snapshot.posting_date)} ${fmtTime(snapshot.posting_time)}</span>
         </div>
         ${
-			snapshot.cashier
+			!snapshot.sales_person && publicNickname(snapshot.cashier_nickname)
 				? `<div class="meta-row">
             <span class="meta-label">Cashier:</span>
-            <span class="meta-value">${esc(snapshot.cashier)}</span>
+            <span class="meta-value">${esc(publicNickname(snapshot.cashier_nickname))}</span>
         </div>`
 				: ""
 		}
+        ${snapshot.sales_person ? `<div class="meta-row"><span class="meta-label">Salesperson:</span><span class="meta-value">${esc(snapshot.sales_person)}</span></div>` : ""}
     </div>
-
-    ${
-		snapshot.customer_name
-			? `<div class="customer-section">
-        <div class="meta-row">
-            <span class="meta-label">Customer:</span>
-            <span class="customer-name">${esc(snapshot.customer_name)}</span>
-        </div>
-    </div>`
-			: ""
-	}
 
     <hr class="div-solid">
 
@@ -253,15 +233,7 @@ export function buildReceiptHtml(snapshot: ReceiptSnapshot, ctx: ReceiptContext)
     <hr class="div-double">
 
     <div class="totals-section">
-        <div class="total-row" style="font-size:9px;color:#333;">
-            <span class="total-label">${totalItems} item${totalItems !== 1 ? "s" : ""} &bull; ${formatQty(
-				snapshot.total_qty,
-			)} unit${snapshot.total_qty !== 1 ? "s" : ""}</span>
-        </div>
-        <div class="total-row">
-            <span class="total-label">Subtotal</span>
-            <span class="total-value">${money(snapshot.subtotal)}</span>
-        </div>
+        ${snapshot.total_discount > 0.001 || snapshot.taxes.length ? `<div class="total-row"><span class="total-label">Subtotal</span><span class="total-value">${money(snapshot.subtotal)}</span></div>` : ""}
         ${discountRow}
         ${netTotalRow}
         ${taxesHtml}
@@ -286,13 +258,9 @@ export function buildReceiptHtml(snapshot: ReceiptSnapshot, ctx: ReceiptContext)
     </div>
 
     <div class="receipt-footer">
-        ${
-			isReturn
-				? '<div class="thank-you">Refund Processed</div>'
-				: '<div class="thank-you">Thank You!</div>'
-		}
-        ${ctx.receipt_footer ? `<div class="receipt-footer-html">${ctx.receipt_footer}</div>` : ""}
-        <div class="powered-by">Powered by XPOS &bull; ${new Date().getFullYear()}</div>
+        ${isReturn ? '<div class="refund-message">Refund processed</div>' : ""}
+        <div class="thank-you">${esc(ctx.receipt_message || "Thank you for shopping with us.")}</div>
+        <div class="powered-by">Powered by ${esc(ctx.receipt_brand || "X POS")}</div>
     </div>
 </div>`;
 }

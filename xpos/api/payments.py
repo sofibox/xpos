@@ -272,6 +272,20 @@ def settle_outstanding_invoice(
 		frappe.throw(_("Sales Invoice {0} does not exist").format(invoice))
 
 	invoice_doc = frappe.get_doc("Sales Invoice", invoice)
+	invoice_doc.check_permission("read")
+	opening = frappe.get_doc("POS Opening Shift", pos_opening_shift)
+	opening.check_permission("read")
+	profile_name = pos_profile or opening.pos_profile
+	profile = frappe.get_cached_doc("POS Profile", profile_name)
+	if (opening.status != "Open" or opening.pos_profile != profile_name
+		or opening.company != invoice_doc.company or profile.company != invoice_doc.company):
+		frappe.throw(_("Choose an open shift and invoice from the same POS company."), frappe.PermissionError)
+	from xpos.api.auth import is_superuser
+	if not is_superuser(frappe.session.user):
+		if opening.user != frappe.session.user or not any(row.user == frappe.session.user for row in profile.applicable_for_users):
+			frappe.throw(_("You can only collect payment in your assigned open shift."), frappe.PermissionError)
+	if mode_of_payment not in {row.mode_of_payment for row in profile.payments}:
+		frappe.throw(_("Choose a payment method configured in the POS Profile."), frappe.PermissionError)
 
 	if invoice_doc.docstatus != 1:
 		frappe.throw(_("Only a submitted invoice can be settled."))

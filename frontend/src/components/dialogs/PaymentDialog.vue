@@ -159,7 +159,7 @@
 								>
 							</div>
 						</div>
-						<div class="flex gap-2 flex-wrap">
+						<div class="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2">
 							<button
 								v-for="(method, idx) in availableMethods"
 								:key="method.mode_of_payment"
@@ -170,11 +170,14 @@
 								"
 								data-testid="payment-method"
 								:data-mode="method.mode_of_payment"
+                                :aria-label="method.mode_of_payment"
+                                :aria-pressed="selectedMethod === method.mode_of_payment"
+                                :title="method.mode_of_payment"
 								@click="selectMethod(method.mode_of_payment)"
 								@keydown.left.prevent="focusMethod(idx - 1)"
 								@keydown.right.prevent="focusMethod(idx + 1)"
 								@keydown.down.prevent="focusAmountInput"
-								class="flex-1 min-w-20 p-2.5 rounded-xl border-2 text-center transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-ring"
+								class="min-w-0 min-h-24 p-2.5 rounded-xl border-2 text-center transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-ring"
 								:class="
 									selectedMethod === method.mode_of_payment
 										? 'border-primary bg-primary/5 text-primary shadow-sm'
@@ -187,9 +190,12 @@
 										class="w-5 h-5 mx-auto"
 									/>
 								</div>
-								<p class="text-[11px] font-medium truncate">
-									{{ method.mode_of_payment }}
-								</p>
+								<p class="text-xs font-medium whitespace-normal break-words leading-snug">
+                                    {{ method.mode_of_payment.split(" - ")[0] }}
+                                </p>
+                                <p v-if="method.mode_of_payment.includes(' - ')" class="text-sm font-bold whitespace-normal break-words leading-snug mt-1">
+                                    {{ method.mode_of_payment.split(" - ").slice(1).join(" - ") }}
+                                </p>
 							</button>
 						</div>
 					</div>
@@ -497,7 +503,7 @@
 									:is="getMethodIcon(leg.mode_of_payment)"
 									class="w-4 h-4 shrink-0"
 								/>
-								<span class="text-xs font-medium text-foreground truncate flex-1">
+								<span class="text-xs font-medium text-foreground whitespace-normal break-words min-w-0 flex-1">
 									{{ leg.mode_of_payment }}
 								</span>
 								<NumberInput
@@ -740,6 +746,7 @@ import {
 	Banknote,
 	CreditCard,
 	Landmark,
+	QrCode,
 	Smartphone,
 	FileText,
 	DollarSign,
@@ -1220,6 +1227,7 @@ function cancelLoyaltyInput() {
 
 function getMethodIcon(method: string) {
 	const lower = method.toLowerCase();
+	if (/\bqr\b|duitnow/.test(lower)) return QrCode;
 	if (lower.includes("cash")) return Banknote;
 	if (lower.includes("card") || lower.includes("credit") || lower.includes("debit")) return CreditCard;
 	if (lower.includes("bank") || lower.includes("transfer")) return Landmark;
@@ -1325,6 +1333,10 @@ function buildInvoicePayload(): InvoiceData {
 
 async function submitPayment(withPrint: boolean = true) {
 	if (isSubmitting.value) return;
+	if (posStore.posProfile?.custom_require_sales_person && !cartStore.isReturnMode && !cartStore.salesPerson) {
+		showError(__("Select a Sales Person before payment"));
+		return;
+	}
 
 	if (showLoyaltyInput.value && !cartStore.redeemLoyaltyPoints && (redeemPointsInput.value || 0) > 0) {
 		applyLoyalty();

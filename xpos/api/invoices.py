@@ -5,6 +5,7 @@ import json
 from collections import defaultdict
 
 import frappe
+from xpos.api.nicknames import nickname
 from frappe import _, cstr
 from frappe.utils import cint, flt, getdate, now_datetime, nowdate
 from frappe.utils.background_jobs import enqueue
@@ -321,6 +322,8 @@ def create_invoice(data: str | dict, local_id: str | None = None):
 		frappe.throw(_("At least one item is required"))
 
 	pos = frappe.get_cached_doc("POS Profile", pos_profile)
+	if cint(pos.get("custom_require_sales_person")) and not is_return and not data.get("sales_person"):
+		frappe.throw(_("Select a Sales Person before payment"))
 
 	from xpos.api.discounts import validate_discount_payload
 	validate_discount_payload(data, pos)
@@ -418,9 +421,9 @@ def create_invoice(data: str | dict, local_id: str | None = None):
 	invoice_doc.pos_notes = data.get("pos_notes", "")
 	invoice_doc.pos_delivery_date = data.get("pos_delivery_date", None) or None
 
-	sales_person = data.get("sales_person") or None
+	sales_person = resolve_return_sales_person(invoice_doc.return_against) if is_return else data.get("sales_person") or None
 	if sales_person:
-		apply_sales_person(invoice_doc, sales_person, pos_profile)
+		apply_sales_person(invoice_doc, sales_person, None if is_return else pos_profile)
 	else:
 		apply_sales_person(invoice_doc, resolve_return_sales_person(invoice_doc.return_against))
 
@@ -1314,6 +1317,7 @@ def get_invoice_details(invoice_name: str, doctype: str = ""):
 		"redeem_loyalty_points": getattr(doc, "redeem_loyalty_points", 0),
 		"loyalty_redemption_account": getattr(doc, "loyalty_redemption_account", None),
 		"owner": doc.owner,
+		"owner_nickname": nickname(doc.owner),
 		"pos_profile": getattr(doc, "pos_profile", None),
 		"coupon_code": getattr(doc, "coupon_code", None),
 		"remarks": getattr(doc, "remarks", None),
@@ -1571,6 +1575,7 @@ def get_invoice_for_return(invoice_name: str, pos_profile: str = "", doctype: st
 		"grand_total": doc.grand_total,
 		"currency": doc.currency,
 		"items": items,
+		"sales_person": doc.sales_team[0].sales_person if doc.get("sales_team") else None,
 		"is_fully_returned": is_fully_returned,
 		"return_expired": return_expired,
 		"payments": [{"mode_of_payment": p.mode_of_payment, "amount": p.amount} for p in doc.payments],

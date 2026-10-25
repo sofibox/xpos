@@ -5,7 +5,8 @@ from xpos.constants import RTL_LANGUAGES
 
 
 def get_context(context):
-	context.boot = get()
+	from xpos.api.nicknames import public_boot
+	context.boot = public_boot(get())
 	# get_csrf_token() saves the token on the session. A token generated here and not saved passes
 	# only until something else (the desk in another tab) creates the session's real token; after
 	# that every POST from this page fails with CSRFTokenError.

@@ -3,6 +3,7 @@
 		<div class="shrink-0 px-6 py-4 border-b border-border bg-background">
 			<div class="flex items-center justify-between">
 				<div>
+					<a href="/desk/stock/lozira-products" class="text-sm text-muted-foreground hover:text-foreground">← {{ __("Back to Products") }}</a>
 					<h1 class="text-xl font-bold text-foreground">{{ __("Barcode Printer") }}</h1>
 					<p class="text-sm text-muted-foreground mt-0.5">
 						{{ __("Generate and print barcode labels for items") }}

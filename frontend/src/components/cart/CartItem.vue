@@ -24,7 +24,7 @@
 		</div>
 
 		<div class="flex-1 min-w-0">
-			<p class="text-[11px] font-medium text-foreground leading-tight truncate">
+			<p class="text-[11px] font-medium text-foreground leading-tight whitespace-normal break-words">
 				{{ item.item_name }}
 				<span
 					v-if="item.pos_is_free_item"
