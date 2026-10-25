@@ -309,17 +309,13 @@ class TestCreateInvoicePricing(unittest.TestCase):
 		self.run_invoice(profile(), [{"item_code": "A", "qty": 1, "rate": 55}], prices={"A": 80})
 		self.assertEqual(self.rows[0].rate, 55)
 
-	def test_crafted_free_line_is_checked_as_a_sale_line(self):
-		self.run_invoice(
-			profile(allow_zero_rated_items=0),
-			[
-				{"item_code": "A", "qty": 1, "rate": 80},
-				{"item_code": "B", "qty": 1, "rate": 0, "is_free_item": 1, "is_offer": 1, "offers": "X"},
-			],
-			prices={"A": 80, "B": 0},
-		)
-		self.assertEqual(self.sale_rows(), self.rows)
-		self.assertFalse(self.rows[1].is_free_item == 1)
+	def test_crafted_free_line_is_rejected_by_lozira_discount_guard(self):
+		with self.assertRaises(frappe.PermissionError):
+			self.run_invoice(
+				profile(allow_zero_rated_items=0),
+				[{"item_code": "B", "qty": 1, "rate": 0, "is_free_item": 1, "is_offer": 1}],
+				prices={"B": 0},
+			)
 
 	def test_discounted_line_is_checked_as_a_sale_line(self):
 		self.can_change_price.return_value = True

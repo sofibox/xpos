@@ -105,6 +105,7 @@ after_install = "xpos.install.after_install"
 # ---------
 
 after_migrate = [
+	"xpos.patches.preserve_invoice_series.execute",
 	"xpos.patches.add_pos_query_indexes.execute",
 	"xpos.x_pos.doctype.referral_code.referral_code.add_customer_company_unique",
 ]

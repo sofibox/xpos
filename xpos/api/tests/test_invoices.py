@@ -410,8 +410,9 @@ class TestGetInvoices(unittest.TestCase):
 class TestGetInvoiceDetails(unittest.TestCase):
 	"""Tests for get_invoice_details function."""
 
+	@patch("xpos.api.invoices.nickname", return_value="STAFF")
 	@patch("xpos.api.invoices.frappe")
-	def test_get_invoice_details_returns_full_invoice(self, mock_frappe):
+	def test_get_invoice_details_returns_full_invoice(self, mock_frappe, mock_nickname):
 		"""Test that get_invoice_details returns complete invoice data."""
 		mock_invoice = MagicMock()
 		mock_invoice.as_dict.return_value = {
