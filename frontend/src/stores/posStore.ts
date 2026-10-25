@@ -16,6 +16,7 @@ import {
 	type TaxDetail,
 	type PrintSettings,
 	type ReceiptContext,
+	type GiftCardConfig,
 } from "@/types/pos.types";
 import { isOnline } from "@/utils";
 import { symbolFor } from "@/composables/useCurrency";
@@ -32,11 +33,11 @@ export const usePosStore = defineStore("pos", () => {
 	const taxes = ref<TaxDetail[]>([]);
 	const taxInclusiveMode = ref(false);
 	const disableRoundedTotal = ref(false);
+	const giftCardConfig = ref<GiftCardConfig | null>(null);
 	const printSettings = ref<PrintSettings | null>(null);
 	const showOpeningDialog = ref(false);
 	const openingData = ref<OpeningData | null>(null);
 	const showClosingDialog = ref(false);
-	const closingData = ref<ShiftSummary | null>(null);
 	const printFormats = ref<PrintFormat[]>([]);
 	const lastInvoiceName = ref("");
 	const isShiftOpen = computed(() => !!posOpeningShift.value);
@@ -65,6 +66,8 @@ export const usePosStore = defineStore("pos", () => {
 			pos_tender_currency: p.pos_tender_currency || invoiceCurrency.value,
 			type: p.type || "",
 			is_foreign_tender: !!p.is_foreign_tender,
+			takes_reference: !!p.takes_reference,
+			requires_reference: !!p.requires_reference,
 			exchange_rate: p.exchange_rate ?? 1,
 			rate_date: p.rate_date || "",
 		}));
@@ -148,6 +151,16 @@ export const usePosStore = defineStore("pos", () => {
 
 	const allowZeroRatedItems = computed(() => !!posProfile.value?.allow_zero_rated_items);
 
+	const useDeliveryCharges = computed(() => !!posProfile.value?.use_delivery_charges);
+
+	const autoSetDeliveryCharges = computed(
+		() => useDeliveryCharges.value && !!posProfile.value?.auto_set_delivery_charges,
+	);
+
+	const forcePriceFromCustomerPriceList = computed(
+		() => !!posProfile.value?.force_price_from_customer_price_list,
+	);
+
 	const maxDiscountAllowed = computed(() => posProfile.value?.max_discount_percentage_allowed || 0);
 
 	const inputQty = computed(() => !!posProfile.value?.input_qty);
@@ -163,6 +176,8 @@ export const usePosStore = defineStore("pos", () => {
 	const allowCashDeposit = computed(() => !!posProfile.value?.allow_cash_deposit);
 
 	const fetchCoupon = computed(() => !!posProfile.value?.auto_fetch_coupons_gifts);
+
+	const allowCouponEntry = computed(() => !!posProfile.value?.allow_coupon_entry);
 
 	const showTemplateItems = computed(() => !!posProfile.value?.show_template_items);
 
@@ -192,6 +207,10 @@ export const usePosStore = defineStore("pos", () => {
 
 	const cashModeOfPayment = computed(() => posProfile.value?.cash_mode_of_payment || "Cash");
 
+	/** Gift cards are online-only, so the desktop app (which queues every sale locally) never offers them. */
+	const giftCards = computed(() => (isElectron() ? null : giftCardConfig.value));
+	const giftCardMode = computed(() => giftCards.value?.mode_of_payment || "");
+
 	const purchaseTaxes = computed(() => posProfile.value?.purchase_taxes || []);
 
 	function clearShiftState(): void {
@@ -202,6 +221,7 @@ export const usePosStore = defineStore("pos", () => {
 		taxes.value = [];
 		taxInclusiveMode.value = false;
 		disableRoundedTotal.value = false;
+		giftCardConfig.value = null;
 		printSettings.value = null;
 		isReady.value = false;
 		isCashier.value = true;
@@ -217,6 +237,7 @@ export const usePosStore = defineStore("pos", () => {
 		taxes.value = result.taxes || [];
 		taxInclusiveMode.value = !!result.tax_inclusive;
 		disableRoundedTotal.value = !!result.disable_rounded_total;
+		giftCardConfig.value = result.gift_cards || null;
 		printSettings.value = result.print_settings || null;
 		isCashier.value = result.is_cashier ?? true;
 		showOpeningDialog.value = false;
@@ -379,6 +400,7 @@ export const usePosStore = defineStore("pos", () => {
 				taxes.value = result.taxes || [];
 				taxInclusiveMode.value = !!result.tax_inclusive;
 				disableRoundedTotal.value = !!result.disable_rounded_total;
+				giftCardConfig.value = result.gift_cards || null;
 				printSettings.value = result.print_settings || null;
 				showOpeningDialog.value = false;
 				isReady.value = true;
@@ -399,6 +421,7 @@ export const usePosStore = defineStore("pos", () => {
 			taxInclusiveMode.value = !!result.tax_inclusive;
 
 			disableRoundedTotal.value = !!result.disable_rounded_total;
+			giftCardConfig.value = result.gift_cards || null;
 
 			printSettings.value = result.print_settings || null;
 			showOpeningDialog.value = false;
@@ -445,11 +468,9 @@ export const usePosStore = defineStore("pos", () => {
 	async function fetchClosingData(): Promise<ShiftSummary | undefined> {
 		if (!posOpeningShift.value?.name) return;
 		try {
-			const data = await call<ShiftSummary>("xpos.api.shifts.get_shift_summary", {
+			return await call<ShiftSummary>("xpos.api.shifts.get_shift_summary", {
 				opening_shift: posOpeningShift.value.name,
 			});
-			closingData.value = data;
-			return data;
 		} catch (error) {
 			console.error("Error fetching closing data:", error);
 			throw error;
@@ -530,7 +551,6 @@ export const usePosStore = defineStore("pos", () => {
 		showOpeningDialog,
 		openingData,
 		showClosingDialog,
-		closingData,
 		printFormats,
 		lastInvoiceName,
 		invoiceType,
@@ -565,6 +585,9 @@ export const usePosStore = defineStore("pos", () => {
 		allowWriteOffChange,
 		displayItemCode,
 		allowZeroRatedItems,
+		forcePriceFromCustomerPriceList,
+		useDeliveryCharges,
+		autoSetDeliveryCharges,
 		maxDiscountAllowed,
 		inputQty,
 		taxInclusive,
@@ -573,6 +596,7 @@ export const usePosStore = defineStore("pos", () => {
 		allowPosExpense,
 		allowCashDeposit,
 		fetchCoupon,
+		allowCouponEntry,
 		showTemplateItems,
 		hideVariantsItems,
 		autoSetBatch,
@@ -585,6 +609,8 @@ export const usePosStore = defineStore("pos", () => {
 		allowOutstandingSettlement,
 		printBackupReceipt,
 		cashModeOfPayment,
+		giftCards,
+		giftCardMode,
 		purchaseTaxes,
 		hideImages,
 		hideUnavailableItems,

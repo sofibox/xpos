@@ -8,6 +8,30 @@
 			{{ __("Prices calculated offline, will be confirmed when the invoice syncs") }}
 		</div>
 
+		<div
+			v-if="cartStore.repriceReview"
+			role="alert"
+			class="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-[11px] text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200 space-y-1.5"
+		>
+			<p class="font-semibold">{{ __("Prices changed - nothing was charged or saved") }}</p>
+			<p>
+				{{
+					__(
+						"The server priced this sale at {0}. Check the marked lines, then take payment again.",
+						[money(cartStore.repriceReview.rounded_total || cartStore.repriceReview.grand_total)],
+					)
+				}}
+			</p>
+			<Button
+				size="sm"
+				variant="outline"
+				class="h-7 text-[11px]"
+				@click="cartStore.acknowledgeRepricing()"
+			>
+				{{ __("I have reviewed the new prices") }}
+			</Button>
+		</div>
+
 		<div class="space-y-1.5">
 			<div class="flex items-center justify-between text-sm">
 				<span class="text-muted-foreground">{{ __("Subtotal") }}</span>
@@ -48,7 +72,7 @@
 								: 'text-foreground'
 						"
 					>
-						{{ tax.included_in_print_rate ? "" : "+" }}{{ money(tax.amount) }}
+						{{ formatTaxAmount(tax.amount, tax.included_in_print_rate, money) }}
 					</span>
 				</div>
 			</template>
@@ -162,7 +186,7 @@
 
 			<TooltipWrapper :content="__('Coupon')">
 				<Button
-					v-if="posStore.fetchCoupon"
+					v-if="posStore.allowCouponEntry"
 					variant="outline"
 					size="lg"
 					class="flex-1 min-w-0 px-2"
@@ -174,6 +198,19 @@
 					@click="showCoupon = !showCoupon"
 				>
 					<Ticket class="w-4 h-4" />
+				</Button>
+			</TooltipWrapper>
+
+			<TooltipWrapper v-if="canSellGiftCards" :content="__('Sell gift card')">
+				<Button
+					variant="outline"
+					size="lg"
+					class="flex-1 min-w-0 px-2"
+					data-testid="sell-gift-card"
+					:disabled="!offlineStore.isOnline || (!cartStore.isEmpty && !cartStore.isGiftCardSale)"
+					@click="showGiftCard = !showGiftCard"
+				>
+					<Gift class="w-4 h-4" />
 				</Button>
 			</TooltipWrapper>
 
@@ -211,7 +248,10 @@
 					<Trash2 class="w-4 h-4" />
 				</Button>
 			</TooltipWrapper>
-			<TooltipWrapper v-if="!cartStore.isReturnMode" :content="__('Delivery charge')">
+			<TooltipWrapper
+				v-if="!cartStore.isReturnMode && posStore.useDeliveryCharges"
+				:content="__('Delivery charge')"
+			>
 				<Button
 					variant="outline"
 					size="lg"
@@ -315,6 +355,32 @@
 		</transition>
 
 		<transition name="slide-up">
+			<div v-if="showGiftCard" class="bg-muted rounded-lg p-3 space-y-2">
+				<div class="flex items-center gap-2">
+					<NumberInput
+						v-model="giftCardValue"
+						:min="0"
+						:precision="moneyPrecision"
+						class="flex-1"
+						data-testid="gift-card-value"
+						:placeholder="__('Gift card value')"
+						@keydown.enter="addGiftCard"
+					/>
+					<Button size="sm" :disabled="!(giftCardValue > 0)" @click="addGiftCard">
+						{{ __("Add gift card") }}
+					</Button>
+				</div>
+				<p class="text-xs text-muted-foreground">
+					{{
+						__(
+							"A new code is printed when the sale is paid. Gift cards are sold on their own sale.",
+						)
+					}}
+				</p>
+			</div>
+		</transition>
+
+		<transition name="slide-up">
 			<div v-if="showCoupon" class="bg-muted rounded-lg p-3 space-y-2">
 				<div class="flex items-center gap-2">
 					<Input
@@ -359,7 +425,7 @@ import { hasPermission } from "@/services/userRights";
 import { useCartStore } from "@/stores/cartStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useOfferStore } from "@/stores/offerStore";
-import { call, showSuccess, showError } from "@/services/api";
+import { call, showSuccess, showError, showInfo } from "@/services/api";
 import { __ } from "@/lib/translate";
 import { isElectron } from "@/services/electronBridge";
 import { isTabConflictError } from "@/utils";
@@ -386,6 +452,7 @@ import {
 } from "lucide-vue-next";
 import type { DeliveryCharge } from "@/types/pos.types";
 import { useMoney } from "@/composables/useMoney";
+import { formatTaxAmount } from "@/utils/numberFormat";
 
 const posStore = usePosStore();
 const { money, moneyPrecision, percent } = useMoney();
@@ -397,6 +464,21 @@ const { printInvoice, printInvoiceLocal } = usePrintInvoice();
 
 const showDiscount = ref(false);
 const showCoupon = ref(false);
+const showGiftCard = ref(false);
+const giftCardValue = ref(0);
+const canSellGiftCards = computed(
+	() => !!posStore.giftCards && !cartStore.isReturnMode && hasPermission("sell_gift_card"),
+);
+
+function addGiftCard() {
+	const result = cartStore.addGiftCardLine(giftCardValue.value);
+	if (!result.success) {
+		showError(result.message || __("Could not add the gift card."));
+		return;
+	}
+	giftCardValue.value = 0;
+	showGiftCard.value = false;
+}
 const showDelivery = ref(false);
 const isLoadingDelivery = ref(false);
 const availableDeliveryCharges = ref<DeliveryCharge[]>([]);
@@ -508,9 +590,14 @@ function syncSelectedDeliveryCharge(charges: DeliveryCharge[]) {
 
 	if (currentCharge) {
 		cartStore.setDeliveryCharge(null);
+		showInfo(
+			__("Delivery charge {0} is no longer available and was removed.", [
+				currentCharge.label || currentCharge.name,
+			]),
+		);
 	}
 
-	if (posStore.posProfile?.auto_set_delivery_charges && charges.length > 0) {
+	if (posStore.autoSetDeliveryCharges && charges.length > 0) {
 		cartStore.setDeliveryCharge(charges[0]);
 	}
 }
@@ -522,7 +609,17 @@ async function syncAutoDeliveryCharge() {
 		return;
 	}
 
-	if (!posStore.posProfile?.auto_set_delivery_charges) {
+	if (!posStore.useDeliveryCharges) {
+		availableDeliveryCharges.value = [];
+		showDelivery.value = false;
+		if (cartStore.selectedDeliveryCharge) {
+			cartStore.setDeliveryCharge(null);
+			showInfo(__("Delivery charges are disabled for this POS Profile; the charge was removed."));
+		}
+		return;
+	}
+
+	if (!posStore.autoSetDeliveryCharges && !cartStore.selectedDeliveryCharge) {
 		return;
 	}
 
@@ -532,7 +629,8 @@ async function syncAutoDeliveryCharge() {
 
 watch(
 	[
-		() => posStore.posProfile?.auto_set_delivery_charges,
+		() => posStore.useDeliveryCharges,
+		() => posStore.autoSetDeliveryCharges,
 		() => posStore.profileName,
 		() => posStore.companyName,
 		() => cartStore.customer?.name || "",
@@ -594,6 +692,7 @@ async function applyCouponCode() {
 			cartStore.customer?.name || "",
 			posStore.companyName,
 		);
+		if (cartStore.appliedCoupon) cartStore.removeCoupon();
 		if (result.coupon) {
 			const posOfferName = (result.coupon as Record<string, unknown>).pos_offer as string | undefined;
 			const storeOffer = posOfferName

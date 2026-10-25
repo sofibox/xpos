@@ -1,0 +1,49 @@
+# This action:
+#
+# 1. Builds release notes from the conventional commits since the previous tag
+#    (works whether changes land through PRs or direct pushes).
+# 2. Groups them into Breaking / Features / Bug Fixes / Performance, dropping chore/ci/docs/etc.
+# 3. Updates release info.
+#
+# Called from release.yml after semantic-release publishes a tag; can also be run by hand.
+
+name: "Release Notes"
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Tag of release like v2.10.0"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      tag_name:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  regen-notes:
+    name: "Regenerate release notes"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Update notes
+        run: |
+          git fetch --tags --force
+          python3 .github/helper/release_notes.py "$RELEASE_TAG" "$REPO" > notes.md
+          cat notes.md
+          RELEASE_ID=$(gh api -H "Accept: application/vnd.github+json" /repos/$REPO/releases/tags/$RELEASE_TAG | jq -r '.id')
+          gh api --method PATCH -H "Accept: application/vnd.github+json" /repos/$REPO/releases/$RELEASE_ID -F body=@notes.md
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+          REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag_name }}

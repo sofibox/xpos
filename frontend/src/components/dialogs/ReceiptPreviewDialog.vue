@@ -323,7 +323,7 @@ import { ref } from "vue";
 import { Invoice } from "@/types/pos.types";
 import { useRouter } from "vue-router";
 import { call, showError } from "@/services/api";
-import { get_full_url } from "@/utils";
+import { usePrintInvoice } from "@/composables/usePrintInvoice";
 import { Badge } from "../ui/badge";
 
 const props = defineProps<{
@@ -333,6 +333,7 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [] }>();
 
 const posStore = usePosStore();
+const { openInvoicePrintView } = usePrintInvoice();
 const { money, amount, qty, percent } = useMoney();
 const cartStore = useCartStore();
 const router = useRouter();
@@ -361,8 +362,7 @@ function orderDateTime(order: Invoice): string {
 }
 
 function printInvoice(name: string) {
-	const url = `/printview?doctype=${posStore.invoiceType}&name=${name}&format=${posStore.defaultPrintFormat}&no_letterhead=0&trigger_print=1`;
-	window.open(get_full_url(url), "_blank");
+	void openInvoicePrintView(name);
 }
 
 async function repeatFromOrder(order: Invoice) {

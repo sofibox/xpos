@@ -12,6 +12,7 @@ import type { CartItem, POSOffer } from "@/types/pos.types";
 
 export interface OfferItemDiscount {
 	item_code: string;
+	uid?: string;
 	offer_name: string;
 	offer_title: string;
 	discount_percentage: number;
@@ -127,6 +128,8 @@ export function evaluateOffers(offers: POSOffer[], cartItems: CartItem[]): Offer
 	if (!realItems.length) return result;
 
 	for (const offer of offers) {
+		if (offerVal(offer, "promo_source", "") === "Promotional Scheme") continue;
+
 		const offerType = str(offerVal(offer, "offer", ""));
 		const applyOn = str(offerVal(offer, "apply_on", ""));
 		const offerName = offer.name || "";
@@ -156,7 +159,9 @@ export function evaluateOffers(offers: POSOffer[], cartItems: CartItem[]): Offer
 			continue;
 		}
 
-		const matchingItems = realItems.filter((item) => doesOfferMatchItem(offer, item));
+		const matchingItems = realItems.filter(
+			(item) => !item.pos_is_free_item && doesOfferMatchItem(offer, item),
+		);
 		if (!matchingItems.length) continue;
 
 		const matchedQty = matchingItems.reduce((s, i) => s + Math.abs(i.qty), 0);
@@ -197,6 +202,7 @@ function _evaluateItemPrice(
 	for (const item of matchingItems) {
 		const disc: OfferItemDiscount = {
 			item_code: item.item_code,
+			uid: item.uid,
 			offer_name: offerName,
 			offer_title: offerTitle,
 			discount_percentage: 0,

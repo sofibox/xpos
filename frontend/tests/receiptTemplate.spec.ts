@@ -75,10 +75,10 @@ describe("buildReceiptHtml", () => {
 		expect(html).toContain("02:05 PM");
 		expect(html).toContain("Coffee &amp; Cream"); // HTML-escaped
 		expect(html).toContain("Acme &lt;Store&gt;"); // company name escaped
-		expect(html).toContain("<b>Welcome</b>"); // header HTML kept raw
+		expect(html).not.toContain("<b>Welcome</b>"); // LOZIRA compact header omits the legacy receipt heading
 		expect(html).toContain("Cash");
 		expect(html).toContain("Change");
-		expect(html).toContain("Tax ID: TAX-99");
+		expect(html).not.toContain("Tax ID: TAX-99"); // LOZIRA compact receipt uses its approved header
 	});
 
 	it("shows RETURN banner and REFUND label for returns", () => {

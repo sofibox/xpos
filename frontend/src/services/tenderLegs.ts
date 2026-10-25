@@ -61,7 +61,10 @@ export function mergeTenderLeg(legs: TenderLeg[], leg: TenderLeg, ctx: TenderCon
 		(row) =>
 			row.mode_of_payment === leg.mode_of_payment &&
 			row.currency === leg.currency &&
-			row.exchange_rate === leg.exchange_rate,
+			row.exchange_rate === leg.exchange_rate &&
+			// each gift card is its own row: they are different balances
+			row.gift_card === leg.gift_card &&
+			row.reference_no === leg.reference_no,
 	);
 
 	if (!existing) {
@@ -184,6 +187,9 @@ export function toInvoicePayments(legs: TenderLeg[], invoiceCurrency: string): I
 				row.pos_tender_amount = leg.native_amount;
 				row.pos_exchange_rate = leg.exchange_rate;
 			}
+			if (leg.reference_no) row.reference_no = leg.reference_no;
+			if (leg.gift_card_auth) row.gift_card_auth = leg.gift_card_auth;
+			else if (leg.gift_card) row.gift_card = leg.gift_card;
 			return row;
 		});
 }

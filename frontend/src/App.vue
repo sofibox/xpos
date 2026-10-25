@@ -46,6 +46,8 @@
 
 			<PaymentDialog v-if="cartStore.showPaymentDialog" />
 
+			<GiftCardIssuedDialog v-if="cartStore.issuedGiftCards.length" />
+
 			<CustomerSelect v-if="customerStore.showCustomerDialog" />
 
 			<LoyaltyDialog v-if="customerStore.showLoyaltyDialog" />
@@ -85,7 +87,7 @@
 			<button
 				v-if="!isAuthPage && errorCount > 0 && !showErrorInspector"
 				type="button"
-				class="fixed bottom-3 end-3 z-50 flex items-center gap-1.5 rounded-full bg-destructive px-3 py-1 text-xs font-medium text-destructive-foreground shadow-md select-none cursor-pointer"
+				class="fixed bottom-3 inset-e-3 z-50 flex items-center gap-1.5 rounded-full bg-destructive px-3 py-1 text-xs font-medium text-destructive-foreground shadow-md select-none cursor-pointer"
 				:title="__('Open Error Inspector')"
 				@click="showErrorInspector = true"
 			>
@@ -109,7 +111,7 @@
 			>
 				<button
 					type="button"
-					class="fixed bottom-3 start-3 z-50 flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium shadow-md select-none cursor-pointer"
+					class="fixed bottom-3 inset-s-3 z-50 flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium shadow-md select-none cursor-pointer"
 					:class="
 						syncStatus.isSyncing.value
 							? 'bg-blue-600 text-white'
@@ -167,6 +169,7 @@ import DefaultLayout from "@/layouts/DefaultLayout.vue";
 import OpeningDialog from "@/components/dialogs/OpeningDialog.vue";
 import ClosingDialog from "@/components/dialogs/ClosingDialog.vue";
 import PaymentDialog from "@/components/dialogs/PaymentDialog.vue";
+import GiftCardIssuedDialog from "@/components/dialogs/GiftCardIssuedDialog.vue";
 import CustomerSelect from "@/components/customer/CustomerSelect.vue";
 import LoyaltyDialog from "@/components/dialogs/LoyaltyDialog.vue";
 import ItemDetailDialog from "@/components/dialogs/ItemDetailDialog.vue";
@@ -188,11 +191,12 @@ import { useKeyboardShortcuts } from "@/composables/useKeyboardShortcuts";
 import { isElectron } from "@/services/electronBridge";
 import ErrorInspector from "@/components/errors/ErrorInspector.vue";
 import { unseenCount as errorUnseenCount } from "@/services/errorLog";
-import { get_full_url } from "@/utils";
+import { usePrintInvoice } from "@/composables/usePrintInvoice";
 import { getCustomer } from "./utils";
 
 const route = useRoute();
 const posStore = usePosStore();
+const { openInvoicePrintView } = usePrintInvoice();
 const cartStore = useCartStore();
 const customerStore = useCustomerStore();
 const itemStore = useItemStore();
@@ -308,12 +312,7 @@ function handleCashDeposit() {
 function handlePrintLast() {
 	const name = posStore.lastInvoiceName;
 	if (!name) return;
-	window.open(
-		get_full_url(
-			`/printview?doctype=${posStore.invoiceType}&name=${name}&format=${posStore.defaultPrintFormat}&no_letterhead=0&trigger_print=1`,
-		),
-		"_blank",
-	);
+	void openInvoicePrintView(name);
 }
 
 function handleShowShortcutsDialog() {

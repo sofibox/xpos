@@ -13,6 +13,8 @@ POS_PERMISSIONS = (
 	("allow_reprint_invoice", "Reprint Invoice", "Billing & Invoicing"),
 	("print_draft_invoice", "Print Draft Invoice", "Billing & Invoicing"),
 	("shift_report", "Shift Report", "Billing & Invoicing"),
+	("view_expected_amount", "View Expected Amount", "Billing & Invoicing"),
+	("resolve_fiscal_check", "Resolve FBR Check", "Billing & Invoicing"),
 	# Discounts & Pricing
 	("apply_additional_discount", "Apply Additional Discount", "Discounts & Pricing"),
 	("show_edit_discount_field", "Edit Discount Field", "Discounts & Pricing"),
@@ -21,6 +23,8 @@ POS_PERMISSIONS = (
 	("sale_return", "Sale Return", "Sales Operations"),
 	("recall_other_shift_tabs", "Recall Other Shifts' Tabs", "Sales Operations"),
 	("settle_outstanding_invoice", "Settle Outstanding Invoice", "Sales Operations"),
+	("sell_gift_card", "Sell Gift Card", "Sales Operations"),
+	("redeem_gift_card", "Accept Gift Card Payment", "Sales Operations"),
 	# Cash Management
 	("expense", "Expense", "Cash Management"),
 	("bank_drop", "Bank Drop", "Cash Management"),

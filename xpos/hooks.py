@@ -58,7 +58,7 @@ page_renderer = ["xpos.pwa.ServiceWorkerPage"]
 # Svg Icons
 # ------------------
 # include app icons in desk
-# app_include_icons = "xpos/public/icons.svg"
+app_include_icons = ["/assets/xpos/icons/module-icons.svg"]
 
 # Home Pages
 # ----------
@@ -91,6 +91,7 @@ jinja = {
 		"xpos.x_pos.api.jinja_helpers.xpos_tender_rate",
 		"xpos.x_pos.api.jinja_helpers.xpos_number",
 		"xpos.x_pos.api.jinja_helpers.xpos_qty",
+		"xpos.x_pos.api.jinja_helpers.xpos_gift_card_line",
 	],
 }
 
@@ -103,7 +104,10 @@ after_install = "xpos.install.after_install"
 # Migration
 # ---------
 
-after_migrate = ["xpos.patches.add_pos_query_indexes.execute"]
+after_migrate = [
+	"xpos.patches.add_pos_query_indexes.execute",
+	"xpos.x_pos.doctype.referral_code.referral_code.add_customer_company_unique",
+]
 
 # Uninstallation
 # ------------
@@ -147,9 +151,10 @@ has_permission = {
 
 # DocType Class
 # ---------------
-# Extend standard doctype classes (mixin — does not miss upstream fixes)
+# Extend standard doctype classes (mixin - does not miss upstream fixes)
 
 extend_doctype_class = {
+	"Sales Invoice": "xpos.x_pos.overrides.sales_invoice.XposSalesInvoice",
 	"POS Invoice": "xpos.x_pos.overrides.pos_invoice.CustomPOSInvoice",
 	"POS Invoice Merge Log": "xpos.x_pos.overrides.pos_invoice_merge_log.CustomPOSInvoiceMergeLog",
 }
@@ -159,21 +164,41 @@ extend_doctype_class = {
 # Hook on document methods and events
 
 doc_events = {
+	"Journal Entry": {
+		"before_insert": "xpos.api.customer_credit.read_latest_before_spend",
+		"before_validate": "xpos.api.customer_credit.read_latest_before_spend",
+		"before_update_after_submit": "xpos.api.customer_credit.read_latest_before_spend",
+		"before_submit": "xpos.api.customer_credit.lock_credit_note_spend",
+	},
+	"Payment Entry": {
+		"before_insert": "xpos.api.customer_credit.read_latest_before_spend",
+		"before_validate": "xpos.api.customer_credit.read_latest_before_spend",
+		"before_update_after_submit": "xpos.api.customer_credit.read_latest_before_spend",
+		"before_submit": "xpos.api.customer_credit.lock_credit_note_spend",
+	},
 	"Sales Invoice": {
 		"validate": "xpos.x_pos.api.invoice.validate",
+		"before_print": "xpos.api.print_formats.enforce_reprint_right",
 		"before_submit": "xpos.x_pos.api.invoice.before_submit",
 		"before_cancel": "xpos.x_pos.api.invoice.before_cancel",
 		"on_cancel": "xpos.x_pos.api.invoice.on_cancel",
 	},
 	"POS Invoice": {
 		"validate": "xpos.x_pos.api.invoice.validate",
+		"before_print": "xpos.api.print_formats.enforce_reprint_right",
 		"before_submit": "xpos.x_pos.api.invoice.before_submit",
 		"before_cancel": "xpos.x_pos.api.invoice.before_cancel",
 		"on_cancel": "xpos.x_pos.api.invoice.on_cancel",
 	},
+	"Mode of Payment": {
+		"validate": "xpos.x_pos.doctype.pos_closing_shift.closing_processing.reclass.validate_mode_of_payment",
+	},
 	"Customer": {
 		"validate": "xpos.x_pos.api.customer.validate",
 		"after_insert": "xpos.x_pos.api.customer.after_insert",
+	},
+	"POS Profile": {
+		"validate": "xpos.api.print_formats.validate_print_format_rules",
 	},
 }
 

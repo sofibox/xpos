@@ -107,7 +107,7 @@
 									>
 								</span>
 								<span :class="tax.included_in_print_rate ? 'text-blue-500' : ''">
-									{{ tax.included_in_print_rate ? "" : "+" }}{{ money(tax.amount) }}
+									{{ formatTaxAmount(tax.amount, tax.included_in_print_rate, money) }}
 								</span>
 							</div>
 							<div
@@ -198,6 +198,66 @@
                                 </p>
 							</button>
 						</div>
+
+						<div v-if="canRedeemGiftCards" class="mt-2" data-testid="gift-card-tender">
+							<p v-if="!offlineStore.isOnline" class="text-xs text-muted-foreground">
+								{{ __("Gift cards need a live connection.") }}
+							</p>
+							<div v-else-if="showGiftInput" class="flex gap-2">
+								<input
+									ref="giftCodeRef"
+									v-model="giftCodeInput"
+									data-testid="gift-card-code"
+									autocomplete="off"
+									class="flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm font-mono uppercase"
+									:placeholder="__('Gift card code')"
+									@keydown.enter.stop.prevent="applyGiftCard"
+									@keydown.esc.stop.prevent="showGiftInput = false"
+								/>
+								<Button
+									size="sm"
+									:disabled="checkingGift || !giftCodeInput.trim()"
+									@click="applyGiftCard"
+								>
+									<Loader2 v-if="checkingGift" class="w-4 h-4 animate-spin" />
+									{{ __("Apply") }}
+								</Button>
+							</div>
+							<Button v-else variant="outline" size="sm" class="w-full" @click="openGiftInput">
+								<Gift class="w-4 h-4" />
+								{{ __("Pay with Gift Card") }}
+							</Button>
+						</div>
+
+						<div
+							v-if="
+								cartStore.isReturnMode &&
+								posStore.giftCardMode &&
+								cartStore.returnGiftCards.length
+							"
+							class="mt-2 space-y-1"
+						>
+							<Button
+								v-for="card in cartStore.returnGiftCards"
+								:key="card.gift_card"
+								variant="outline"
+								size="sm"
+								class="w-full"
+								:disabled="
+									!offlineStore.isOnline ||
+									splitPayments.some((leg) => leg.gift_card === card.gift_card)
+								"
+								@click="refundToGiftCard(card)"
+							>
+								<Gift class="w-4 h-4" />
+								{{
+									__("Refund to gift card {0} (up to {1})", [
+										card.masked_code,
+										money(card.amount),
+									])
+								}}
+							</Button>
+						</div>
 					</div>
 
 					<div>
@@ -228,6 +288,22 @@
 							@keydown.up.prevent="focusMethodByIndex"
 							@keydown.down.prevent="focusFirstQuickAmount"
 						/>
+
+						<div v-if="selectedTakesReference" class="mt-2" data-testid="payment-reference">
+							<input
+								ref="referenceRef"
+								v-model="referenceNo"
+								autocomplete="off"
+								maxlength="140"
+								class="w-full h-9 rounded-md border border-input bg-background px-3 text-sm font-mono"
+								:placeholder="
+									selectedNeedsReference
+										? __('Transfer / reference number (required)')
+										: __('Transfer / reference number')
+								"
+								@keydown.enter.stop.prevent="handleAmountInputSubmit"
+							/>
+						</div>
 
 						<div v-if="selectedIsForeign" class="mt-1.5 space-y-1">
 							<p v-if="selectedRateMissing" class="text-xs font-medium text-destructive">
@@ -280,7 +356,7 @@
 							size="sm"
 							class="w-full"
 							@click="addSplitPayment"
-							:disabled="!selectedMethod || tenderedAmount <= 0"
+							:disabled="!selectedMethod || tenderedAmount <= 0 || referenceMissing"
 						>
 							<Plus class="w-4 h-4" />
 							Add {{ selectedMethod }} &mdash;
@@ -296,6 +372,16 @@
 								<div class="flex items-center gap-2">
 									<component :is="getMethodIcon(sp.mode_of_payment)" class="w-5 h-5" />
 									<span class="font-medium text-foreground">{{ sp.mode_of_payment }}</span>
+									<span
+										v-if="sp.masked_code"
+										class="font-mono text-xs text-muted-foreground"
+										>{{ sp.masked_code }}</span
+									>
+									<span
+										v-if="sp.reference_no"
+										class="font-mono text-xs text-muted-foreground"
+										>{{ sp.reference_no }}</span
+									>
 								</div>
 								<div class="flex items-center gap-2">
 									<div class="text-right">
@@ -363,6 +449,50 @@
 						>
 							{{ money(amount) }}
 						</Button>
+					</div>
+
+					<div
+						v-if="showCustomerCredit"
+						class="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-3 space-y-2"
+						data-testid="customer-credit"
+					>
+						<div class="flex items-center justify-between">
+							<span class="text-sm font-medium text-foreground">{{
+								__("Customer Credit")
+							}}</span>
+							<Badge variant="secondary" class="text-[10px]">
+								{{ __("Available") }}: {{ money(availableCreditTotal) }}
+							</Badge>
+						</div>
+						<div
+							v-for="source in creditSources"
+							:key="creditKey(source)"
+							class="flex items-center justify-between gap-2 text-xs"
+						>
+							<span class="min-w-0 truncate">
+								{{
+									source.source_type === "Payment Entry"
+										? __("Advance payment")
+										: __("Credit note")
+								}}
+								{{ source.source_name }}
+								<span class="text-muted-foreground">({{ money(source.available) }})</span>
+							</span>
+							<NumberInput
+								v-model="creditAllocations[creditKey(source)]"
+								:min="0"
+								:max="source.available"
+								:precision="precisionFor(invoiceCurrency)"
+								class="w-24 text-end text-sm"
+								:aria-label="__('Credit to use from {0}', [source.source_name])"
+							/>
+						</div>
+						<p
+							v-if="creditApplied > 0"
+							class="text-xs font-medium text-emerald-700 dark:text-emerald-300"
+						>
+							{{ __("Using {0} of customer credit", [money(creditApplied)]) }}
+						</p>
 					</div>
 
 					<div
@@ -719,7 +849,15 @@ import { usePrintInvoice } from "@/composables/usePrintInvoice";
 import { submitDurableInvoice } from "@/services/invoiceSubmission";
 import { useOfflineSale } from "@/composables/useOfflineSale";
 import { isElectron } from "@/services/electronBridge";
-import { fiscalizeViaLocalService } from "@/services/fbrLocalService";
+import {
+	completeLocalFiscalization,
+	FiscalUncertainError,
+	LocalFiscalRejected,
+} from "@/services/fbrLocalService";
+import { addPendingInvoice } from "@/services/dbBridge";
+import { checkGiftCard, hasGiftCardActivity } from "@/services/giftCards";
+import { hasPermission } from "@/services/userRights";
+import { useOfflineStore } from "@/stores/offlineStore";
 import {
 	Dialog,
 	DialogContent,
@@ -773,9 +911,19 @@ import {
 	toInvoicePayments,
 	type TenderContext,
 } from "@/services/tenderLegs";
-import type { InvoiceChangeLeg, InvoiceData, InvoicePayment, TenderLeg } from "@/types/pos.types";
+import type {
+	CustomerCreditSource,
+	GiftCardRefund,
+	InvoiceChangeLeg,
+	InvoiceData,
+	InvoicePayment,
+	IssuedGiftCard,
+	RepriceResponse,
+	TenderLeg,
+} from "@/types/pos.types";
 import { isOnline, extractErrorMessage, isTabConflictError } from "@/utils";
 import { nowDate } from "@/utils/datetime";
+import { formatTaxAmount } from "@/utils/numberFormat";
 import {
 	isPaymentDialogSaveAndPrintShortcut,
 	isPaymentDialogSaveOnlyShortcut,
@@ -789,6 +937,7 @@ const cartStore = useCartStore();
 const customerStore = useCustomerStore();
 const authStore = useAuthStore();
 const paymentStore = usePaymentStore();
+const offlineStore = useOfflineStore();
 
 const amountInput = ref<InstanceType<typeof NumberInput> | null>(null);
 const submitBtn = ref<InstanceType<typeof Button> | null>(null);
@@ -798,12 +947,50 @@ const numpadRefs: Record<number, HTMLElement> = {};
 
 const selectedMethod = ref("");
 const tenderedAmount = ref(0);
+const creditSources = ref<CustomerCreditSource[]>([]);
+const creditAllocations = ref<Record<string, number>>({});
+
+function creditKey(source: CustomerCreditSource): string {
+	return `${source.source_type}:${source.source_name}`;
+}
+
+const showCustomerCredit = computed(
+	() =>
+		posStore.useCustomerCredit &&
+		!cartStore.isReturnMode &&
+		!!cartStore.customer &&
+		offlineStore.isOnline &&
+		!isElectron() &&
+		creditSources.value.length > 0,
+);
+
+const availableCreditTotal = computed(() => creditSources.value.reduce((sum, s) => sum + s.available, 0));
+
+const creditApplied = computed(() => {
+	if (!showCustomerCredit.value) return 0;
+	return roundCurrency(
+		creditSources.value.reduce(
+			(sum, s) => sum + Math.min(Math.max(creditAllocations.value[creditKey(s)] || 0, 0), s.available),
+			0,
+		),
+	);
+});
+
+watch(creditApplied, (credit) => {
+	if (isSplitPayment.value) return;
+	const due = roundCurrency(Math.max(Math.abs(cartStore.grandTotal) - credit, 0));
+	tenderedAmount.value = due;
+	nextTick(() => amountInput.value?.setValue(due));
+});
 const isSubmitting = ref(false);
 const writeOffInput = ref(0);
 const printAfterSave = ref(false);
 
 const isSplitPayment = ref(false);
 const splitPayments = ref<TenderLeg[]>([]);
+
+const referenceRef = ref<HTMLInputElement | null>(null);
+const referenceNo = ref("");
 
 const changeLegs = ref<InvoiceChangeLeg[]>([]);
 const changeTouched = ref(false);
@@ -820,10 +1007,26 @@ const redeemPointsInput = ref(0);
 const numpadKeys = ["7", "8", "9", "4", "5", "6", "1", "2", "3", "C", "0", "⌫"];
 
 const availableMethods = computed(() => {
-	const methods = posStore.paymentMethods;
+	// the gift card mode is tendered only through a scanned card, never as a plain amount
+	const methods = posStore.paymentMethods.filter((m) => m.mode_of_payment !== posStore.giftCardMode);
 	if (methods.length > 0) return methods;
 	return [{ mode_of_payment: "Cash" }, { mode_of_payment: "Card" }];
 });
+
+const giftCodeRef = ref<HTMLInputElement | null>(null);
+const giftCodeInput = ref("");
+const showGiftInput = ref(false);
+const checkingGift = ref(false);
+
+const canRedeemGiftCards = computed(
+	() =>
+		!!posStore.giftCardMode &&
+		!cartStore.isReturnMode &&
+		!cartStore.isGiftCardSale &&
+		hasPermission("redeem_gift_card"),
+);
+const hasGiftCardLegs = computed(() => splitPayments.value.some((leg) => leg.gift_card));
+const isGiftCardSale = computed(() => cartStore.isGiftCardSale || hasGiftCardLegs.value);
 
 const quickAmounts = computed(() => {
 	const total = Math.abs(cartStore.grandTotal);
@@ -860,10 +1063,29 @@ function buildLeg(mode: string, nativeAmount: number, id?: string): TenderLeg {
 	return buildTenderLeg(mode, nativeAmount, tenderContext.value, id);
 }
 
+const selectedTakesReference = computed(() => {
+	const mode = posStore.tenderModeFor(selectedMethod.value);
+	return !!(mode?.takes_reference || mode?.requires_reference);
+});
+const selectedNeedsReference = computed(
+	() => !!posStore.tenderModeFor(selectedMethod.value)?.requires_reference && !cartStore.isReturnMode,
+);
+const referenceMissing = computed(() => selectedNeedsReference.value && !referenceNo.value.trim());
+
+watch(selectedMethod, () => {
+	referenceNo.value = "";
+});
+
+function withReference(leg: TenderLeg): TenderLeg {
+	const reference = referenceNo.value.trim();
+	if (selectedTakesReference.value && reference) leg.reference_no = reference;
+	return leg;
+}
+
 const activeLegs = computed<TenderLeg[]>(() => {
 	if (isSplitPayment.value) return splitPayments.value;
 	if (!selectedMethod.value || tenderedAmount.value <= 0) return [];
-	return [buildLeg(selectedMethod.value, tenderedAmount.value, "single")];
+	return [withReference(buildLeg(selectedMethod.value, tenderedAmount.value, "single"))];
 });
 
 const splitTotal = computed(() => tenderBaseTotal(splitPayments.value, invoiceCurrency.value));
@@ -898,7 +1120,7 @@ const paymentOfferGrandDiscount = computed(() => {
 const effectiveTendered = computed(() => legsBaseTotal.value);
 
 const changeAmount = computed(() => {
-	const total = Math.abs(cartStore.grandTotal);
+	const total = Math.abs(cartStore.grandTotal) - creditApplied.value;
 	const diff = roundCurrency(effectiveTendered.value - total);
 	return diff > 0 ? diff : 0;
 });
@@ -914,7 +1136,7 @@ watch(changeAmount, (amount) => {
 
 const remainingAmount = computed(() => {
 	const total = Math.abs(cartStore.grandTotal);
-	const diff = roundCurrency(total - effectiveTendered.value);
+	const diff = roundCurrency(total - creditApplied.value - effectiveTendered.value);
 	return diff > 0 ? diff : 0;
 });
 
@@ -986,6 +1208,7 @@ function changeRemainingIn(currency: string): number {
 
 const canSubmitOutstanding = computed(() => {
 	if (cartStore.isReturnMode || remainingAmount.value <= 0) return false;
+	if (cartStore.isGiftCardSale) return false;
 	if (posStore.allowCreditSale) return true;
 	return hasRecordedPayment.value && posStore.allowPartialPayment;
 });
@@ -1004,7 +1227,9 @@ const outstandingSubmissionHint = computed(() => {
 
 const canSubmit = computed(() => {
 	if (cartStore.isEmpty) return false;
+	if (isGiftCardSale.value && !offlineStore.isOnline) return false;
 	if (selectedRateMissing.value) return false;
+	if (!isSplitPayment.value && referenceMissing.value) return false;
 	const total = roundCurrency(Math.abs(cartStore.grandTotal));
 	if (total <= 0) return true;
 	if (remainingAmount.value > 0) {
@@ -1012,7 +1237,7 @@ const canSubmit = computed(() => {
 	}
 	if (!changeAllocationValid.value) return false;
 	if (!isSplitPayment.value && !selectedMethod.value) return false;
-	return roundCurrency(effectiveTendered.value) >= total;
+	return roundCurrency(effectiveTendered.value + creditApplied.value) >= total;
 });
 
 onMounted(async () => {
@@ -1034,6 +1259,7 @@ onMounted(async () => {
 				cartStore.customer.name,
 				posStore.companyName,
 			);
+			creditSources.value = credit?.sources || [];
 			if (credit) {
 				customerLoyaltyPoints.value = credit.loyalty_points || 0;
 				customerLoyaltyAmount.value = credit.loyalty_amount || 0;
@@ -1084,6 +1310,11 @@ onUnmounted(() => {
 
 function handleAmountInputSubmit(event: KeyboardEvent) {
 	if (isSubmitting.value) return;
+
+	if (referenceMissing.value && tenderedAmount.value > 0) {
+		referenceRef.value?.focus();
+		return;
+	}
 
 	if (isPaymentDialogSaveOnlyShortcut(event)) {
 		if (canSubmit.value) {
@@ -1178,14 +1409,92 @@ function refillTenderRemainder() {
 
 function addSplitPayment() {
 	if (!selectedMethod.value || tenderedAmount.value <= 0) return;
-	const leg = buildLeg(selectedMethod.value, tenderedAmount.value);
+	if (referenceMissing.value) {
+		referenceRef.value?.focus();
+		return;
+	}
+	const leg = withReference(buildLeg(selectedMethod.value, tenderedAmount.value));
 	mergeTenderLeg(splitPayments.value, leg, tenderContext.value);
+	referenceNo.value = "";
 	refillTenderRemainder();
 }
 
 function removeSplitPayment(idx: number) {
 	splitPayments.value.splice(idx, 1);
+	cartStore.setGiftCardTender(hasGiftCardLegs.value || cartStore.returnGiftCards.length > 0);
 	refillTenderRemainder();
+}
+
+function openGiftInput() {
+	showGiftInput.value = true;
+	nextTick(() => giftCodeRef.value?.focus());
+}
+
+function addGiftCardLeg(mode: string, amount: number, card: Partial<TenderLeg>) {
+	if (!isSplitPayment.value) {
+		isSplitPayment.value = true;
+		splitPayments.value = [];
+	}
+	splitPayments.value.push({ ...buildLeg(mode, amount), ...card });
+	const other = availableMethods.value[0]?.mode_of_payment;
+	if (other) selectedMethod.value = other;
+	refillTenderRemainder();
+}
+
+async function applyGiftCard() {
+	const code = giftCodeInput.value.trim();
+	if (!code || checkingGift.value) return;
+	if (!isOnline()) {
+		showError(__("Gift cards need a live connection."));
+		return;
+	}
+	checkingGift.value = true;
+	try {
+		const card = await checkGiftCard(code, posStore.profileName);
+		if (splitPayments.value.some((leg) => leg.gift_card === card.gift_card)) {
+			showInfo(__("This gift card is already applied."));
+			return;
+		}
+		// a sale paid by card is charged to the cent, so drop rounding before working out what is due
+		cartStore.setGiftCardTender(true);
+		const paidSoFar = isSplitPayment.value ? splitTotal.value : 0;
+		const due = roundCurrency(Math.abs(cartStore.grandTotal) - paidSoFar);
+		const amount = roundCurrency(Math.min(card.balance, due));
+		if (amount <= 0) {
+			cartStore.setGiftCardTender(hasGiftCardLegs.value);
+			showInfo(__("Nothing is left to pay."));
+			return;
+		}
+		addGiftCardLeg(card.mode_of_payment, amount, {
+			gift_card: card.gift_card,
+			gift_card_auth: card.auth,
+			masked_code: card.masked_code,
+		});
+		giftCodeInput.value = "";
+		showGiftInput.value = false;
+		showInfo(
+			__("Gift card {0}: {1} applied, {2} left on the card.", [
+				card.masked_code,
+				money(amount),
+				money(card.balance - amount),
+			]),
+		);
+	} catch (error) {
+		showError(extractErrorMessage(error));
+	} finally {
+		checkingGift.value = false;
+	}
+}
+
+function refundToGiftCard(card: GiftCardRefund) {
+	const paidSoFar = isSplitPayment.value ? splitTotal.value : 0;
+	const due = roundCurrency(Math.abs(cartStore.grandTotal) - paidSoFar);
+	const amount = roundCurrency(Math.min(card.amount, due));
+	if (amount <= 0) return;
+	addGiftCardLeg(posStore.giftCardMode, amount, {
+		gift_card: card.gift_card,
+		masked_code: card.masked_code,
+	});
 }
 
 watch(selectedCurrency, (next, prev) => {
@@ -1275,6 +1584,13 @@ function validateForSubmission(): { valid: boolean; message?: string } {
 		}
 	}
 
+	if (isGiftCardSale.value && (!isOnline() || isElectron())) {
+		return {
+			valid: false,
+			message: __("Gift cards need a live connection. This sale cannot be saved offline."),
+		};
+	}
+
 	if (selectedRateMissing.value) {
 		return {
 			valid: false,
@@ -1282,6 +1598,10 @@ function validateForSubmission(): { valid: boolean; message?: string } {
 				selectedCurrency.value,
 			]),
 		};
+	}
+
+	if (creditApplied.value > roundCurrency(Math.abs(cartStore.grandTotal))) {
+		return { valid: false, message: __("Customer credit is more than the amount due.") };
 	}
 
 	if (!cartStore.isReturnMode && remainingAmount.value > 0 && !canSubmitOutstanding.value) {
@@ -1328,6 +1648,18 @@ function buildInvoicePayload(): InvoiceData {
 		invoiceData.is_credit_sale = true;
 	}
 
+	if (creditApplied.value > 0) {
+		invoiceData.customer_credit = creditSources.value
+			.map((source) => ({
+				source_type: source.source_type,
+				source_name: source.source_name,
+				amount: roundCurrency(
+					Math.min(creditAllocations.value[creditKey(source)] || 0, source.available),
+				),
+			}))
+			.filter((row) => row.amount > 0);
+	}
+
 	return invoiceData;
 }
 
@@ -1350,6 +1682,11 @@ async function submitPayment(withPrint: boolean = true) {
 		return;
 	}
 
+	if (cartStore.pricingIssues.length) {
+		showError(cartStore.pricingIssues.join("\n"));
+		return;
+	}
+
 	const stockCheck = await cartStore.revalidateStock();
 	if (!stockCheck.valid) {
 		showError(stockCheck.messages.join("\n"));
@@ -1360,8 +1697,14 @@ async function submitPayment(withPrint: boolean = true) {
 	printAfterSave.value = withPrint;
 
 	const invoiceData = buildInvoicePayload();
+	const giftCardSale = hasGiftCardActivity(invoiceData);
 	try {
 		const shiftName = posStore.posOpeningShift?.name || "";
+
+		if (giftCardSale || invoiceData.customer_credit?.length) {
+			await submitGiftCardSale(invoiceData, withPrint);
+			return;
+		}
 
 		if (isElectron() && window.electronAPI?.db) {
 			const result = await window.electronAPI.db.addPendingInvoice({
@@ -1412,10 +1755,10 @@ async function submitPayment(withPrint: boolean = true) {
 				let response = await call<CreateInvoiceResult>("xpos.api.invoices.create_invoice", {
 					data: JSON.stringify(invoiceData),
 				});
-				if (response.status === "fbr_local_required") response = await finalizeWithLocalFbr(response);
-				return response;
+				return await finalizeWithLocalFbr(response);
 			},
 		);
+		if (handleRepricing(result)) return;
 
 		posStore.lastInvoiceName = result.name;
 
@@ -1434,7 +1777,9 @@ async function submitPayment(withPrint: boolean = true) {
 			}
 		}
 	} catch (error: unknown) {
-		if (isTabConflictError(error)) {
+		if (error instanceof FiscalUncertainError) {
+			await holdForFiscalCheck(error, invoiceData, true);
+		} else if (isTabConflictError(error)) {
 			showError(__("This tab was changed on another terminal. Reload it and try again."));
 			close();
 			cartStore.openDraftDialog();
@@ -1455,26 +1800,83 @@ async function submitPayment(withPrint: boolean = true) {
 	}
 }
 
+/**
+ * Gift card value moves only on a live server, so these sales skip the offline queue. If the
+ * response is lost the cart stays put: paying again resends the same sale, which the server
+ * recognises and never charges twice.
+ */
+async function submitGiftCardSale(invoiceData: InvoiceData, withPrint: boolean) {
+	if (isElectron() || !isOnline()) {
+		showError(
+			invoiceData.customer_credit?.length
+				? __("Customer credit needs a live connection. This sale cannot be saved offline.")
+				: __("Gift cards need a live connection. This sale cannot be saved offline."),
+		);
+		return;
+	}
+	let result: CreateInvoiceResult;
+	try {
+		result = await call<CreateInvoiceResult>("xpos.api.invoices.create_invoice", {
+			data: JSON.stringify(invoiceData),
+		});
+		result = await finalizeWithLocalFbr(result);
+	} catch (error) {
+		if (error instanceof FiscalUncertainError) {
+			await holdForFiscalCheck(error, invoiceData, false);
+		} else if (isNetworkError(error)) {
+			showError(
+				__(
+					"The connection dropped before the server answered. Press Pay again to finish this sale; it will not be charged twice.",
+				),
+			);
+		} else {
+			showError(__("Payment failed: {0}", [extractErrorMessage(error)]));
+		}
+		return;
+	}
+
+	if (handleRepricing(result)) return;
+	posStore.lastInvoiceName = result.name;
+	showSuccess(__("Invoice {0} saved successfully!", [result.name]));
+	if (result.issued_gift_cards?.length) cartStore.showIssuedGiftCards(result.issued_gift_cards);
+	cartStore.clearAll();
+	if (withPrint && result.name) {
+		try {
+			await printInvoice(result.name);
+		} catch {
+			showError(__("Sale saved. Receipt printing failed; use Reprint."));
+		}
+	}
+}
+
+function handleRepricing(result: CreateInvoiceResult): boolean {
+	if (result.status !== "reprice_required") return false;
+	cartStore.applyServerRepricing(result as unknown as RepriceResponse);
+	showError((result as unknown as RepriceResponse).message);
+	close();
+	return true;
+}
+
 interface CreateInvoiceResult {
 	name: string;
+	usin?: string;
+	issued_gift_cards?: IssuedGiftCard[];
 	status?: string;
 	doctype?: string;
 	fbr_payload?: Record<string, unknown>;
 	fbr_local_service_url?: string;
+	message?: string;
 }
 
+/** Finish a sale the server saved as a draft waiting for FBR; other answers pass through. */
 async function finalizeWithLocalFbr(pending: CreateInvoiceResult): Promise<CreateInvoiceResult> {
+	if (pending.status === "fbr_uncertain")
+		throw new FiscalUncertainError(pending.name || pending.usin || "", pending.message || "");
+	if (pending.status !== "fbr_local_required") return pending;
 	try {
-		const { invoiceNumber } = await fiscalizeViaLocalService(
-			pending.fbr_payload || {},
-			pending.fbr_local_service_url || "",
-		);
-		return await call<CreateInvoiceResult>("xpos.api.invoices.finalize_fiscal_invoice", {
-			name: pending.name,
-			fbr_invoice_number: invoiceNumber,
-			doctype: pending.doctype,
-		});
+		return await completeLocalFiscalization<CreateInvoiceResult>(pending);
 	} catch (err) {
+		if (!(err instanceof LocalFiscalRejected)) throw err;
 		await call("xpos.api.invoices.discard_draft_invoice", {
 			name: pending.name,
 			doctype: pending.doctype,
@@ -1482,11 +1884,30 @@ async function finalizeWithLocalFbr(pending: CreateInvoiceResult): Promise<Creat
 			/* best-effort cleanup */
 		});
 		throw new Error(
-			__("FBR fiscalization failed — both the FBR cloud and the local service are unavailable.") +
+			__("FBR fiscalization failed - both the FBR cloud and the local service are unavailable.") +
 				" " +
 				extractErrorMessage(err),
 		);
 	}
+}
+
+async function holdForFiscalCheck(error: FiscalUncertainError, invoiceData: InvoiceData, queued: boolean) {
+	if (!queued) {
+		await addPendingInvoice({
+			data: invoiceData,
+			receipt: cartStore.getReceiptSnapshot("", authStore.userFullName),
+			customer_name: invoiceData.customer,
+			grand_total: cartStore.grandTotal,
+		});
+	}
+	cartStore.clearAll();
+	close();
+	showError(
+		__("FBR did not confirm invoice {0}. Check it under Pending invoices before selling it again.", [
+			error.invoice,
+		]),
+	);
+	await offlineStore.syncPendingInvoices();
 }
 
 function close() {

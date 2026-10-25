@@ -7,13 +7,19 @@ from frappe import _
 from frappe.model.mapper import get_mapped_doc
 from frappe.utils import add_days, cint, flt
 
+from xpos.api.profile_rules import validate_delivery_charge
 from xpos.api.tender import validate_tender_currency_legs
 from xpos.x_pos.api.payments import get_pos_credit_redeem_remark
 from xpos.x_pos.api.utilities import get_company_domain
 from xpos.x_pos.doctype.delivery_charges.delivery_charges import (
 	get_applicable_delivery_charges,
 )
-from xpos.x_pos.doctype.pos_coupon.pos_coupon import update_coupon_code_count
+from xpos.x_pos.doctype.pos_coupon.pos_coupon import update_coupon_usage, validate_invoice_coupons
+from xpos.x_pos.gift_cards import (
+	apply_gift_cards_on_submit,
+	reverse_gift_cards_on_cancel,
+	validate_invoice_gift_cards,
+)
 from xpos.x_pos.integrations.fbr import fiscalize_invoice
 
 
@@ -40,21 +46,26 @@ def validate(doc, method):
 	validate_return_access(doc)
 	validate_shift(doc)
 	set_patient(doc)
+	validate_delivery_charge(doc)
 	auto_set_delivery_charges(doc)
 	calc_delivery_charges(doc)
 	apply_tax_inclusive(doc)
 	validate_tender_currency_legs(doc)
+	validate_invoice_gift_cards(doc)
 
 
 def before_submit(doc, method):
+	validate_invoice_coupons(doc)
+	apply_gift_cards_on_submit(doc)
 	fiscalize_invoice(doc)
 	add_loyalty_point(doc)
 	create_sales_order(doc)
-	update_coupon(doc, "used")
+	update_coupon_usage(doc, "used")
 
 
 def before_cancel(doc, method):
-	update_coupon(doc, "cancelled")
+	update_coupon_usage(doc, "cancelled")
+	reverse_gift_cards_on_cancel(doc)
 
 
 def on_cancel(doc, method):
@@ -126,6 +137,8 @@ def create_sales_order(doc):
 		getattr(doc, "pos_opening_shift", None)
 		and doc.pos_profile
 		and doc.is_pos
+		and doc.doctype == "Sales Invoice"
+		and not doc.is_return
 		and getattr(doc, "pos_delivery_date", None)
 		and not doc.update_stock
 		and frappe.get_value("POS Profile", doc.pos_profile, "allow_sales_order")
@@ -144,12 +157,9 @@ def create_sales_order(doc):
 				indicator="green",
 				alert=True,
 			)
-			so_items_map = {item.item_code: item for item in sales_order_doc.items}
-			for inv_item in doc.items:
-				so_item = so_items_map.get(inv_item.item_code)
-				if so_item:
-					inv_item.sales_order = sales_order_doc.name
-					inv_item.so_detail = so_item.name
+			for inv_item, so_item in zip(doc.items, sales_order_doc.items, strict=True):
+				inv_item.sales_order = sales_order_doc.name
+				inv_item.so_detail = so_item.name
 
 
 def make_sales_order(source_name, target_doc=None, ignore_permissions=True):
@@ -197,13 +207,6 @@ def make_sales_order(source_name, target_doc=None, ignore_permissions=True):
 	return doclist
 
 
-def update_coupon(doc, transaction_type):
-	for coupon in getattr(doc, "coupons", []):
-		if not coupon.applied:
-			continue
-		update_coupon_code_count(coupon.coupon, transaction_type)
-
-
 def set_patient(doc):
 	domain = get_company_domain(doc.company)
 	if domain != "Healthcare":
@@ -219,7 +222,10 @@ def auto_set_delivery_charges(doc):
 
 	if getattr(getattr(doc, "flags", None), "xpos_skip_auto_delivery_charges", False):
 		return
-	if not frappe.get_cached_value("POS Profile", doc.pos_profile, "auto_set_delivery_charges"):
+	use_delivery, auto_set = frappe.get_cached_value(
+		"POS Profile", doc.pos_profile, ["use_delivery_charges", "auto_set_delivery_charges"]
+	)
+	if not use_delivery or not auto_set:
 		return
 
 	delivery_charges = get_applicable_delivery_charges(
